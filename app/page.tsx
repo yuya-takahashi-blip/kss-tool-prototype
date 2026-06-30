@@ -106,11 +106,12 @@ const COMMON_FIELDS: FieldDef[] = [
   { key: "memo",    label: "補足メモ", multiline: true },
 ];
 
+// 表紙は基本情報欄（タイトル・提案先・日付）を使うため、フォーム項目は最小限
+const COVER_FIELDS: FieldDef[] = [
+  { key: "coverMemo", label: "表紙メモ（任意・出力されません）", multiline: true },
+];
+
 const SECTION_EXTRA_FIELDS: Record<string, FieldDef[]> = {
-  greeting: [
-    { key: "addressee",   label: "宛名" },
-    { key: "responsible", label: "担当者名" },
-  ],
   brand: [
     { key: "brandName", label: "ブランド名" },
     { key: "brandDesc", label: "ブランド説明", multiline: true },
@@ -155,6 +156,7 @@ const SECTION_EXTRA_FIELDS: Record<string, FieldDef[]> = {
 };
 
 function getFieldsForSection(sectionKey: string): FieldDef[] {
+  if (sectionKey === "greeting") return COVER_FIELDS;
   return [...COMMON_FIELDS, ...(SECTION_EXTRA_FIELDS[sectionKey] ?? [])];
 }
 
@@ -239,12 +241,12 @@ function mergePages(base: PageConfig[], saved: DraftData["pages"]): PageConfig[]
   return base.map((p) => {
     const s = savedMap.get(p.sectionKey);
     if (!s) return p;
-    return {
-      ...p,
-      checked:   typeof s.checked === "boolean" ? s.checked : p.checked,
-      pageCount: typeof s.pageCount === "number" && s.pageCount >= 1 ? s.pageCount : p.pageCount,
-      type:      (["A", "B", "C"] as PageType[]).includes(s.type as PageType) ? s.type : p.type,
-    };
+    const checked   = typeof s.checked === "boolean" ? s.checked : p.checked;
+    const pageCount = typeof s.pageCount === "number" && s.pageCount >= 1 ? s.pageCount : p.pageCount;
+    const rawType   = (["A", "B", "C"] as PageType[]).includes(s.type as PageType) ? s.type : p.type;
+    // For greeting, only A and B are valid; remap C to A
+    const type      = (p.sectionKey === "greeting" && rawType === "C") ? "A" : rawType;
+    return { ...p, checked, pageCount, type };
   });
 }
 
@@ -749,7 +751,9 @@ export default function Home() {
                           <SelectContent>
                             <SelectItem value="A">{labels.A}</SelectItem>
                             <SelectItem value="B">{labels.B}</SelectItem>
-                            <SelectItem value="C">{labels.C}</SelectItem>
+                            {page.sectionKey !== "greeting" && (
+                              <SelectItem value="C">{labels.C}</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>

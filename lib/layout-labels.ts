@@ -2,9 +2,9 @@ export type PageType = "A" | "B" | "C";
 
 export const layoutLabels: Record<string, Record<PageType, string>> = {
   greeting: {
-    A: "標準挨拶文",
-    B: "担当者コメント付き",
-    C: "代表メッセージ風",
+    A: "標準表紙",
+    B: "カスタム",
+    C: "カスタム", // C maps to same as B; only A and B are surfaced in UI
   },
   brand: {
     A: "ロゴ＋説明文＋キービジュアル",

@@ -81,12 +81,25 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
 
   // ── Cover slide (表紙) ───────────────────────────────────────────────────
   if (isCover || sectionKey === "greeting") {
+    // Custom cover: blank-like with hint text
+    if (type === "B" || type === "C") {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-white p-2">
+          <div className="border border-dashed border-gray-300 rounded w-full h-full flex flex-col items-center justify-center gap-1">
+            <div className="text-[9px] font-medium text-gray-400 text-center">カスタム表紙</div>
+            <div className="text-[7px] text-gray-300 text-center">PowerPoint上で編集</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Standard cover (A): title → client → KSS + date
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-white px-3 py-2 gap-1">
         {/* Title — largest */}
-        {(title || h) ? (
+        {title ? (
           <div className="text-[11px] font-bold text-gray-800 text-center leading-snug line-clamp-2">
-            {title || h}
+            {title}
           </div>
         ) : (
           <div className="text-[11px] text-gray-300 italic text-center font-semibold">企画書タイトル</div>
@@ -97,12 +110,9 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
         ) : (
           <div className="text-[9px] text-gray-300 italic text-center">提案先名</div>
         )}
-        {/* KANSAI SUPER STUDIO + date on one line — small */}
-        <div className="text-[7px] text-gray-400 text-center leading-tight mt-0.5">
-          {[
-            "KANSAI SUPER STUDIO",
-            date || "",
-          ].filter(Boolean).join("　")}
+        {/* KANSAI SUPER STUDIO + date — small */}
+        <div className="text-[6px] text-gray-400 text-center leading-tight mt-0.5">
+          {["KANSAI SUPER STUDIO", date || ""].filter(Boolean).join("　")}
         </div>
       </div>
     );

@@ -166,8 +166,32 @@ function addShell(
 
 // ─── Cover slide ──────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function addCoverSlide(pptx: any, title: string, clientName: string, date: string, companyLogo: string) {
+function addCoverSlide(
+  pptx: any,
+  title: string,
+  clientName: string,
+  date: string,
+  companyLogo: string,
+  coverType: PageType
+) {
   const slide = pptx.addSlide();
+
+  // Custom cover: essentially blank — user edits in PowerPoint
+  if (coverType === "B" || coverType === "C") {
+    // Just top/bottom accent lines, nothing else
+    slide.addShape("rect", {
+      x: 0, y: 0, w: SW, h: 0.06,
+      fill: { color: RED }, line: { color: RED },
+    });
+    slide.addShape("rect", {
+      x: 0, y: SH - 0.06, w: SW, h: 0.06,
+      fill: { color: RED }, line: { color: RED },
+    });
+    void pptx;
+    return;
+  }
+
+  // Standard cover (A)
 
   // Top red accent strip
   slide.addShape("rect", {
@@ -211,7 +235,6 @@ function addCoverSlide(pptx: any, title: string, clientName: string, date: strin
     : "KANSAI SUPER STUDIO";
 
   if (companyLogo) {
-    // Image logo (small, bottom area)
     slide.addImage({
       data: companyLogo,
       x: SW / 2 - 1.2,
@@ -235,40 +258,6 @@ function addCoverSlide(pptx: any, title: string, clientName: string, date: strin
 }
 
 // ─── Layout renderers ─────────────────────────────────────────────────────────
-
-function renderGreeting(slide: Slide, type: PageType) {
-  if (type === "A") {
-    // Large text area
-    box(slide, CX, CY, CW, CH, "挨拶文", WHITE, "E0E0E0");
-    txt(slide, "（挨拶文が入ります）", CX + 0.3, CY + 0.3, CW - 0.6, CH - 0.9, {
-      fontSize: 12,
-      color: "BBBBBB",
-      valign: "top",
-      italic: true,
-    });
-    // Signature line
-    box(slide, CX + CW - 3.5, CY + CH - 0.7, 3.5, 0.6, "署名・日付", WHITE, "E0E0E0");
-  } else if (type === "B") {
-    // Photo placeholder + text
-    box(slide, CX, CY, 2.4, CH, "担当者写真", PH, PH_BORDER);
-    box(slide, CX + 2.6, CY, CW - 2.6, CH - 0.7, "コメント本文", WHITE, "E0E0E0");
-    box(slide, CX + 2.6, CY + CH - 0.6, CW - 2.6, 0.55, "氏名・役職", WHITE, "E0E0E0");
-  } else {
-    // Large quote style
-    txt(slide, "❝", CX, CY, CW, 0.7, {
-      fontSize: 36,
-      color: RED,
-      align: "center",
-    });
-    box(slide, CX, CY + 0.6, CW, CH - 1.1, "メッセージ本文", WHITE, "E0E0E0");
-    txt(slide, "— 代表取締役　氏名", CX, CY + CH - 0.45, CW, 0.4, {
-      fontSize: 10,
-      color: MID,
-      align: "right",
-      italic: true,
-    });
-  }
-}
 
 function renderBrand(slide: Slide, type: PageType) {
   if (type === "A") {
@@ -547,7 +536,6 @@ function addContentSlide(
   addShell(pptx, slide, sectionLabel, layoutName, pageNum, totalPages, date);
 
   switch (selectedSlide.sectionKey) {
-    case "greeting": renderGreeting(slide, selectedSlide.type); break;
     case "brand": renderBrand(slide, selectedSlide.type); break;
     case "business_scheme": renderScheme(slide, selectedSlide.type); break;
     case "cases": renderCases(slide, selectedSlide.type); break;
@@ -567,14 +555,19 @@ export async function generatePptx(options: GeneratePptxOptions): Promise<void> 
 
   pptx.layout = "LAYOUT_WIDE"; // 16:9
 
-  // Total slides = cover + content slides
-  const totalPages = options.selectedSlides.length + 1;
+  // Determine cover type from the greeting slide (first slide if sectionKey === "greeting")
+  const greetingSlide = options.selectedSlides.find((s) => s.sectionKey === "greeting");
+  const coverType: PageType = (greetingSlide?.type === "B" || greetingSlide?.type === "C") ? "B" : "A";
+
+  // Content slides = all slides except greeting (cover is generated separately)
+  const contentSlides = options.selectedSlides.filter((s) => s.sectionKey !== "greeting");
+  const totalPages = contentSlides.length + 1; // 1 cover + content slides
 
   // Cover
-  addCoverSlide(pptx, options.title, options.clientName, options.date, options.companyLogo);
+  addCoverSlide(pptx, options.title, options.clientName, options.date, options.companyLogo, coverType);
 
   // Content slides in selectedSlides order
-  options.selectedSlides.forEach((s, i) => {
+  contentSlides.forEach((s, i) => {
     addContentSlide(pptx, s, i + 2, totalPages, options.date);
   });
 
