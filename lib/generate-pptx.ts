@@ -67,48 +67,34 @@ function txt(
 }
 
 /**
- * Arrow: rect shaft + stacked horizontal rects approximating a right-pointing triangle.
+ * Arrow: thick horizontal LINE with endArrowType:"triangle".
  *
- * Root cause: pptxgenjs v4 bleeds ANY shape that uses the `rotate` transform to subsequent
- * slides in the generated PPTX. Eliminating `rotate` entirely is the only safe fix.
+ * Why not rect+rotate, not stacked rects, not preset rightArrow:
+ *   - rightArrow / triangle / ellipse presets → bleed to subsequent slides in pptxgenjs v4
+ *   - rotate on rect                          → also bleeds
+ *   - stacked non-rotated rects               → looks like rectangles, not an arrow
  *
- * The arrowhead is built from N thin horizontal rects whose widths follow a linear ramp
- * (widest at vertical centre, zero at top/bottom edges). PowerPoint renders these as
- * a smooth solid triangle because it uses vector — not pixel — rendering.
+ * A "line" shape stores the arrowhead as a LINE-END STYLE attribute (<a:tailEnd>) inside
+ * <a:ln>, not as a separate preset geometry.  This is a fundamentally different OOXML path
+ * that does not trigger the pptxgenjs v4 cross-slide bleed.
  *
  * Guard: only renders when sectionKey === "business_scheme".
  */
 function drawArrow(sl: Slide, x: number, y: number, w: number, h: number, sectionKey: string) {
   if (sectionKey !== "business_scheme") return;
 
-  const mid    = y + h / 2;
-  const shaftH = Math.max(h * 0.28, 0.06);
-  const shaftW = w * 0.55;
-  const hw     = w - shaftW;          // horizontal span of arrowhead
-  const tipX   = x + w;               // rightmost point (the tip)
+  const mid   = y + h / 2;
+  const lineW = Math.max(Math.round(h * 18), 7);   // line thickness (pt) scales with arrow height
 
-  // Shaft — single non-rotating rect
-  sl.addShape("rect", {
-    x, y: mid - shaftH / 2, w: shaftW, h: shaftH,
-    fill: { color: RED }, line: { color: RED, width: 0 },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (sl as any).addShape("line", {
+    x, y: mid, w, h: 0,
+    line: {
+      color: RED,
+      width: lineW,
+      endArrowType: "triangle",
+    },
   });
-
-  // Arrowhead — N stacked horizontal rects, no rotation.
-  // Band i spans [y + i*bh, y + (i+1)*bh].
-  // Width follows a triangular envelope: widest at centre, zero at top/bottom.
-  const N    = 13;
-  const bh   = h / N;
-  const half = N / 2;
-
-  for (let i = 0; i < N; i++) {
-    const distFromCentre = Math.abs(i + 0.5 - half);
-    const bw = hw * Math.max(0, 1 - distFromCentre / half);
-    if (bw < 0.004) continue;
-    sl.addShape("rect", {
-      x: tipX - bw, y: y + i * bh, w: bw, h: bh,
-      fill: { color: RED }, line: { color: RED, width: 0 },
-    });
-  }
 }
 
 /**
