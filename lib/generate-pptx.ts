@@ -67,34 +67,60 @@ function txt(
 }
 
 /**
- * Arrow: thick horizontal LINE with endArrowType:"triangle".
+ * Arrow: Canvas-rendered PNG embedded as addImage.
  *
- * Why not rect+rotate, not stacked rects, not preset rightArrow:
- *   - rightArrow / triangle / ellipse presets → bleed to subsequent slides in pptxgenjs v4
- *   - rotate on rect                          → also bleeds
- *   - stacked non-rotated rects               → looks like rectangles, not an arrow
+ * Root cause of all previous bleeding:
+ *   pptxgenjs v4 internally shares state for non-rect shape types (preset geometries,
+ *   rotate transforms, line shapes with endArrowType).  The bleed manifests as shapes
+ *   from slide N appearing on slides N+1, N+2, etc.
  *
- * A "line" shape stores the arrowhead as a LINE-END STYLE attribute (<a:tailEnd>) inside
- * <a:ln>, not as a separate preset geometry.  This is a fundamentally different OOXML path
- * that does not trigger the pptxgenjs v4 cross-slide bleed.
+ * addImage embeds the arrow as a per-slide media file in the PPTX package.
+ *   - Each call creates a distinct media entry → zero bleed possible.
+ *   - canvas.toDataURL() is SYNCHRONOUS → no async refactoring needed.
+ *   - Renders as true raster PNG: shaft (rect) + arrowhead (filled triangle polygon).
+ *   - Fallback: plain rect shaft if canvas is unavailable (e.g. SSR context).
  *
  * Guard: only renders when sectionKey === "business_scheme".
  */
 function drawArrow(sl: Slide, x: number, y: number, w: number, h: number, sectionKey: string) {
   if (sectionKey !== "business_scheme") return;
 
-  const mid   = y + h / 2;
-  const lineW = Math.max(Math.round(h * 18), 7);   // line thickness (pt) scales with arrow height
+  if (typeof document !== "undefined") {
+    const DPI  = 192;  // 2× screen density for crisp rendering
+    const pixW = Math.max(Math.round(w * DPI), 4);
+    const pixH = Math.max(Math.round(h * DPI), 4);
+    const canvas = document.createElement("canvas");
+    canvas.width  = pixW;
+    canvas.height = pixH;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const mid    = pixH / 2;
+      const shaftH = Math.max(Math.round(pixH * 0.28), 3);
+      const headW  = Math.round(pixW * 0.42);
+      const shaftW = pixW - headW + 2;
+      ctx.fillStyle = `#${RED}`;
+      // Shaft
+      ctx.fillRect(0, Math.round(mid - shaftH / 2), shaftW, shaftH);
+      // Arrowhead — filled triangle pointing right
+      ctx.beginPath();
+      ctx.moveTo(pixW - headW, 0);
+      ctx.lineTo(pixW,         mid);
+      ctx.lineTo(pixW - headW, pixH);
+      ctx.closePath();
+      ctx.fill();
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (sl as any).addImage({ data: dataUrl, x, y, w, h });
+      } catch { /* ignore */ }
+      return;
+    }
+  }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (sl as any).addShape("line", {
-    x, y: mid, w, h: 0,
-    line: {
-      color: RED,
-      width: lineW,
-      endArrowType: "triangle",
-    },
-  });
+  // Fallback: shaft rect only (canvas unavailable in SSR context)
+  const mid    = y + h / 2;
+  const shaftH = Math.max(h * 0.28, 0.06);
+  sl.addShape("rect", { x, y: mid - shaftH / 2, w, h: shaftH, fill: { color: RED }, line: { color: RED, width: 0 } });
 }
 
 /**
