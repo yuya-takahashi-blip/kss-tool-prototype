@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarIcon, FileText, Download, Loader2, GripVertical } from "lucide-react";
+import { CalendarIcon, FileText, Download, Loader2, GripVertical, Save } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -37,6 +37,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { layoutLabels, getLayoutName, type PageType } from "@/lib/layout-labels";
 import { generatePptx } from "@/lib/generate-pptx";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface PageConfig {
   sectionKey: string;
   sectionName: string;
@@ -54,73 +55,67 @@ interface SelectedSlide {
   slideIndexInSection: number;
 }
 
+interface DraftData {
+  title: string;
+  date: string;
+  clientName: string;
+  pages: Array<{ sectionKey: string; checked: boolean; pageCount: number; type: PageType }>;
+  slideOrder: string[]; // ordered list of slide ids
+  savedAt: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const STORAGE_KEY = "kss-tool-proposal-draft";
+
 const initialPages: PageConfig[] = [
-  {
-    sectionKey: "greeting",
-    sectionName: "ご挨拶",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["挨拶文", "署名"],
-  },
-  {
-    sectionKey: "brand",
-    sectionName: "ブランド紹介",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["ブランド概要", "特徴", "実績"],
-  },
-  {
-    sectionKey: "business_scheme",
-    sectionName: "ビジネススキーム",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["関係図", "フロー図解"],
-  },
-  {
-    sectionKey: "cases",
-    sectionName: "事例紹介",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["導入事例", "効果", "お客様の声"],
-  },
-  {
-    sectionKey: "items",
-    sectionName: "アイテムイメージ",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["商品画像", "商品名", "価格"],
-  },
-  {
-    sectionKey: "schedule",
-    sectionName: "スケジュール",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["タイムライン", "マイルストーン"],
-  },
-  {
-    sectionKey: "pricing",
-    sectionName: "料金・条件",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["料金表", "条件", "特典"],
-  },
-  {
-    sectionKey: "company",
-    sectionName: "会社概要",
-    checked: true,
-    pageCount: 1,
-    type: "A",
-    previewFields: ["会社名", "代表者", "所在地"],
-  },
+  { sectionKey: "greeting",        sectionName: "ご挨拶",           checked: true, pageCount: 1, type: "A", previewFields: ["挨拶文", "署名"] },
+  { sectionKey: "brand",           sectionName: "ブランド紹介",      checked: true, pageCount: 1, type: "A", previewFields: ["ブランド概要", "特徴", "実績"] },
+  { sectionKey: "business_scheme", sectionName: "ビジネススキーム",  checked: true, pageCount: 1, type: "A", previewFields: ["関係図", "フロー図解"] },
+  { sectionKey: "cases",           sectionName: "事例紹介",          checked: true, pageCount: 1, type: "A", previewFields: ["導入事例", "効果", "お客様の声"] },
+  { sectionKey: "items",           sectionName: "アイテムイメージ",   checked: true, pageCount: 1, type: "A", previewFields: ["商品画像", "商品名", "価格"] },
+  { sectionKey: "schedule",        sectionName: "スケジュール",       checked: true, pageCount: 1, type: "A", previewFields: ["タイムライン", "マイルストーン"] },
+  { sectionKey: "pricing",         sectionName: "料金・条件",         checked: true, pageCount: 1, type: "A", previewFields: ["料金表", "条件", "特典"] },
+  { sectionKey: "company",         sectionName: "会社概要",           checked: true, pageCount: 1, type: "A", previewFields: ["会社名", "代表者", "所在地"] },
 ];
 
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+function loadDraft(): DraftData | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DraftData;
+    // Minimal validation
+    if (!parsed.title || !Array.isArray(parsed.pages) || !Array.isArray(parsed.slideOrder)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(data: DraftData): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function formatDateTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const dy = String(d.getDate()).padStart(2, "0");
+    const h = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${y}/${mo}/${dy} ${h}:${mi}`;
+  } catch {
+    return "";
+  }
+}
+
+// ─── Rebuild slides from pages, then apply a saved order ─────────────────────
 function generateSelectedSlides(pages: PageConfig[]): SelectedSlide[] {
   return pages
     .filter((page) => page.checked)
@@ -135,65 +130,73 @@ function generateSelectedSlides(pages: PageConfig[]): SelectedSlide[] {
     );
 }
 
-interface SortableThumbnailProps {
-  slide: SelectedSlide;
-  index: number;
+function applySlideOrder(slides: SelectedSlide[], order: string[]): SelectedSlide[] {
+  const map = new Map(slides.map((s) => [s.id, s]));
+  const ordered: SelectedSlide[] = [];
+  for (const id of order) {
+    const s = map.get(id);
+    if (s) { ordered.push(s); map.delete(id); }
+  }
+  // Append any new slides not in saved order (e.g. newly added sections)
+  map.forEach((s) => ordered.push(s));
+  return ordered;
 }
 
-function SortableThumbnail({ slide, index }: SortableThumbnailProps) {
+// ─── Merge saved page settings onto initialPages ─────────────────────────────
+function mergePages(
+  base: PageConfig[],
+  saved: DraftData["pages"]
+): PageConfig[] {
+  const savedMap = new Map(saved.map((s) => [s.sectionKey, s]));
+  return base.map((p) => {
+    const s = savedMap.get(p.sectionKey);
+    if (!s) return p;
+    return {
+      ...p,
+      checked: typeof s.checked === "boolean" ? s.checked : p.checked,
+      pageCount: typeof s.pageCount === "number" && s.pageCount >= 1 ? s.pageCount : p.pageCount,
+      type: (["A", "B", "C"] as PageType[]).includes(s.type as PageType) ? s.type : p.type,
+    };
+  });
+}
+
+// ─── Thumbnail components ─────────────────────────────────────────────────────
+function SortableThumbnail({ slide, index }: { slide: SelectedSlide; index: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
 
   const displayName =
     slide.slideIndexInSection > 1
       ? `${slide.sectionName} (${slide.slideIndexInSection})`
       : slide.sectionName;
-  const layoutName = getLayoutName(slide.sectionKey, slide.type);
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
       className={`bg-gray-50 rounded-lg border border-gray-200 p-3 aspect-[4/3] flex flex-col justify-between hover:border-gray-300 transition-colors ${isDragging ? "shadow-lg" : ""}`}
     >
       <div>
         <div className="flex items-center justify-between mb-1">
           <div className="text-xs text-gray-500">P.{index + 1}</div>
-          <div
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-1 -m-1 touch-none"
-          >
+          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 -m-1 touch-none">
             <GripVertical className="w-4 h-4 text-gray-400" />
           </div>
         </div>
         <div className="font-medium text-sm text-gray-800 truncate">{displayName}</div>
       </div>
       <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded leading-tight self-start max-w-full truncate">
-        {layoutName}
+        {getLayoutName(slide.sectionKey, slide.type)}
       </div>
     </div>
   );
 }
 
-interface DragOverlayThumbnailProps {
-  slide: SelectedSlide;
-  index: number;
-}
-
-function DragOverlayThumbnail({ slide, index }: DragOverlayThumbnailProps) {
+function DragOverlayThumbnail({ slide, index }: { slide: SelectedSlide; index: number }) {
   const displayName =
     slide.slideIndexInSection > 1
       ? `${slide.sectionName} (${slide.slideIndexInSection})`
       : slide.sectionName;
-  const layoutName = getLayoutName(slide.sectionKey, slide.type);
-
   return (
     <div className="bg-white rounded-lg border border-red-300 p-3 aspect-[4/3] flex flex-col justify-between shadow-xl rotate-2 scale-105">
       <div>
@@ -204,39 +207,82 @@ function DragOverlayThumbnail({ slide, index }: DragOverlayThumbnailProps) {
         <div className="font-medium text-sm text-gray-800 truncate">{displayName}</div>
       </div>
       <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded leading-tight self-start max-w-full truncate">
-        {layoutName}
+        {getLayoutName(slide.sectionKey, slide.type)}
       </div>
     </div>
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
+  // Initialize state lazily so localStorage is read only on first render (client only)
   const [title, setTitle] = useState("企画書タイトル");
   const [date, setDate] = useState("2026/06/30");
   const [clientName, setClientName] = useState("");
   const [pages, setPages] = useState<PageConfig[]>(initialPages);
-  const [message, setMessage] = useState("");
   const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>(() =>
     generateSelectedSlides(initialPages)
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [savedAt, setSavedAt] = useState<string>(""); // ISO string of last save
+  const didRestoreRef = useRef(false);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  // ── Restore from localStorage on mount (runs client-side only) ──────────────
+  useEffect(() => {
+    if (didRestoreRef.current) return;
+    didRestoreRef.current = true;
 
+    const draft = loadDraft();
+    if (!draft) return;
+
+    const restoredPages = mergePages(initialPages, draft.pages);
+    const rawSlides = generateSelectedSlides(restoredPages);
+    const orderedSlides = applySlideOrder(rawSlides, draft.slideOrder);
+
+    setTitle(draft.title ?? "企画書タイトル");
+    setDate(draft.date ?? "2026/06/30");
+    setClientName(draft.clientName ?? "");
+    setPages(restoredPages);
+    setSelectedSlides(orderedSlides);
+    setSavedAt(draft.savedAt ?? "");
+
+    setMessage("前回の内容を復元しました");
+    setTimeout(() => setMessage(""), 3000);
+  }, []);
+
+  // ── Save handler ─────────────────────────────────────────────────────────────
+  const handleSave = useCallback(() => {
+    const now = new Date().toISOString();
+    const draft: DraftData = {
+      title,
+      date,
+      clientName,
+      pages: pages.map(({ sectionKey, checked, pageCount, type }) => ({
+        sectionKey, checked, pageCount, type,
+      })),
+      slideOrder: selectedSlides.map((s) => s.id),
+      savedAt: now,
+    };
+    const ok = saveDraft(draft);
+    if (ok) {
+      setSavedAt(now);
+      setMessage("保存しました");
+    } else {
+      setMessage("保存できませんでした");
+    }
+    setTimeout(() => setMessage(""), 2500);
+  }, [title, date, clientName, pages, selectedSlides]);
+
+  // ── Page config change ────────────────────────────────────────────────────────
   const updateSelectedSlidesForSection = useCallback(
     (sectionKey: string, checked: boolean, pageCount: number, type: PageType) => {
       setSelectedSlides((prevSlides) => {
         const page = pages.find((p) => p.sectionKey === sectionKey);
         if (!page) return prevSlides;
-
         const otherSlides = prevSlides.filter((s) => s.sectionKey !== sectionKey);
         if (!checked || pageCount === 0) return otherSlides;
-
         const newSlides: SelectedSlide[] = Array.from({ length: pageCount }, (_, i) => ({
           id: `${sectionKey}-${i}`,
           sectionKey,
@@ -244,7 +290,6 @@ export default function Home() {
           type,
           slideIndexInSection: i + 1,
         }));
-
         return [...otherSlides, ...newSlides];
       });
     },
@@ -257,9 +302,7 @@ export default function Home() {
     value: boolean | number | PageType
   ) => {
     setPages((prev) =>
-      prev.map((page) =>
-        page.sectionKey !== sectionKey ? page : { ...page, [field]: value }
-      )
+      prev.map((page) => (page.sectionKey !== sectionKey ? page : { ...page, [field]: value }))
     );
 
     const page = pages.find((p) => p.sectionKey === sectionKey);
@@ -280,23 +323,33 @@ export default function Home() {
     }
   };
 
+  // ── DnD ──────────────────────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as string);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
     if (over && active.id !== over.id) {
-      setSelectedSlides((items) => {
-        const oldIndex = items.findIndex((i) => i.id === active.id);
-        const newIndex = items.findIndex((i) => i.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
+      setSelectedSlides((items) =>
+        arrayMove(
+          items,
+          items.findIndex((i) => i.id === active.id),
+          items.findIndex((i) => i.id === over.id)
+        )
+      );
     }
   };
 
   const activeSlide = activeId ? selectedSlides.find((s) => s.id === activeId) : null;
   const activeIndex = activeSlide ? selectedSlides.findIndex((s) => s.id === activeId) : 0;
 
+  // ── Export ────────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     if (selectedSlides.length === 0) {
       setMessage("スライドが選択されていません");
@@ -316,6 +369,7 @@ export default function Home() {
     }
   };
 
+  // ── Derived ───────────────────────────────────────────────────────────────────
   const getPreviewFields = (sectionKey: string): string[] =>
     pages.find((p) => p.sectionKey === sectionKey)?.previewFields || [];
 
@@ -330,6 +384,7 @@ export default function Home() {
 
   const orderedSectionKeys = Array.from(new Set(selectedSlides.map((s) => s.sectionKey)));
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 shadow-sm">
@@ -339,7 +394,9 @@ export default function Home() {
             <span className="hidden sm:inline-block text-gray-400 text-sm">営業企画書生成ツール</span>
           </div>
           {message && (
-            <div className="text-sm px-4 py-2 bg-gray-800 text-white rounded-lg">{message}</div>
+            <div className="text-sm px-4 py-2 bg-gray-800 text-white rounded-lg transition-opacity">
+              {message}
+            </div>
           )}
         </div>
       </header>
@@ -515,43 +572,35 @@ export default function Home() {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
           <Button
-            onClick={() => {
-              setMessage("保存しました");
-              setTimeout(() => setMessage(""), 2000);
-            }}
-            className="h-11 px-6 bg-gray-700 hover:bg-gray-800 text-white"
+            onClick={handleSave}
+            className="h-11 px-6 bg-gray-700 hover:bg-gray-800 text-white flex items-center gap-2"
           >
+            <Save className="w-4 h-4" />
             保存
-          </Button>
-          <Button
-            onClick={() => {
-              setMessage("プレビューを更新しました");
-              setTimeout(() => setMessage(""), 2000);
-            }}
-            variant="outline"
-            className="h-11 px-6 border-gray-300 text-gray-700"
-          >
-            プレビュー更新
           </Button>
           <Button
             onClick={handleExport}
             disabled={exporting}
-            className="h-11 px-6 bg-red-600 hover:bg-red-700 text-white disabled:opacity-70"
+            className="h-11 px-6 bg-red-600 hover:bg-red-700 text-white disabled:opacity-70 flex items-center gap-2"
           >
             {exporting ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 生成中...
               </>
             ) : (
               <>
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="w-4 h-4" />
                 PowerPointを書き出す
               </>
             )}
           </Button>
+          {/* Last saved timestamp */}
+          <span className="text-xs text-gray-400 ml-1">
+            {savedAt ? `最終保存：${formatDateTime(savedAt)}` : "最終保存：未保存"}
+          </span>
         </div>
 
         {/* Page-Specific Preview Cards */}
@@ -569,10 +618,7 @@ export default function Home() {
                   const firstSlide = sectionSlides[0];
 
                   return (
-                    <Card
-                      key={sectionKey}
-                      className="bg-gray-50 border border-gray-200 overflow-hidden"
-                    >
+                    <Card key={sectionKey} className="bg-gray-50 border border-gray-200 overflow-hidden">
                       <CardHeader className="bg-gray-100 px-4 py-3 border-b border-gray-200">
                         <div className="flex items-center justify-between gap-2">
                           <CardTitle className="text-sm font-semibold text-gray-800 truncate">
