@@ -409,26 +409,28 @@ export default function Home() {
                   return (
                     <div
                       key={page.sectionKey}
-                      className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                      className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
                     >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* 1行目：チェックボックス＋ページ名全文 */}
+                      <div className="flex items-center gap-3">
                         <Checkbox
                           id={page.sectionKey}
                           checked={page.checked}
                           onCheckedChange={(checked) =>
                             handlePageChange(page.sectionKey, "checked", checked as boolean)
                           }
-                          className="w-5 h-5"
+                          className="w-5 h-5 shrink-0"
                         />
                         <Label
                           htmlFor={page.sectionKey}
-                          className="text-sm font-medium text-gray-800 cursor-pointer truncate"
+                          className="text-sm font-medium text-gray-800 cursor-pointer"
                         >
                           {page.sectionName}
                         </Label>
                       </div>
-                      <div className="flex items-center gap-2 sm:gap-3 ml-8 sm:ml-0">
-                        <div className="flex items-center gap-1">
+                      {/* 2行目：ページ数＋構成選択 */}
+                      <div className="flex items-center gap-2 ml-8">
+                        <div className="flex items-center gap-1 shrink-0">
                           <Label className="text-xs text-gray-500 whitespace-nowrap">
                             ページ数
                           </Label>
@@ -455,7 +457,7 @@ export default function Home() {
                           }
                           disabled={!page.checked}
                         >
-                          <SelectTrigger className="w-44 h-9 text-xs">
+                          <SelectTrigger className="flex-1 min-w-0 h-9 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
