@@ -93,7 +93,51 @@ function arrow(slide: Slide, x: number, y: number, w: number, h: number) {
   });
 }
 
-// ─── Slide shell (header + footer) ────────────────────────────────────────────
+// ─── Footer helper (non-cover slides only) ────────────────────────────────────
+function addFooterText(slide: Slide, date: string) {
+  // Single full-width centered text — most reliable way to center in PowerPoint
+  const FY = FOOTER_Y + 0.1;
+  const FH = 0.2;
+  const textRuns = date
+    ? [
+        { text: "KANSAI SUPER STUDIO", options: { bold: true } as Record<string, unknown> },
+        { text: `　　${date}`, options: {} as Record<string, unknown> },
+      ]
+    : [{ text: "KANSAI SUPER STUDIO", options: { bold: true } as Record<string, unknown> }];
+
+  slide.addText(textRuns, {
+    x: 0, y: FY, w: SW, h: FH,
+    fontFace: FONT, fontSize: 6.5, color: "B8B8B8",
+    align: "center", valign: "middle",
+  });
+}
+
+function addFooterLogo(slide: Slide, companyLogo: string, date: string) {
+  const FY     = FOOTER_Y + 0.1;
+  const FH     = 0.2;
+  const LOGO_W = 0.85;
+  const LOGO_H = FH;
+  const DATE_W = 0.75;
+  const GAP    = 0.1;
+  const totalW = LOGO_W + (date ? GAP + DATE_W : 0);
+  const startX = (SW - totalW) / 2;
+
+  try {
+    slide.addImage({ data: companyLogo, x: startX, y: FY, w: LOGO_W, h: LOGO_H });
+    if (date) {
+      slide.addText(date, {
+        x: startX + LOGO_W + GAP, y: FY, w: DATE_W, h: FH,
+        fontFace: FONT, fontSize: 6.5, color: "B8B8B8",
+        align: "left", valign: "middle",
+      });
+    }
+  } catch {
+    // Image failed — fall back to centered text
+    addFooterText(slide, date);
+  }
+}
+
+// ─── Slide shell (header only — footer handled separately) ────────────────────
 function addShell(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pptx: any,
@@ -129,66 +173,21 @@ function addShell(
     fontSize: 9, color: RED, align: "center", valign: "middle",
   });
 
-  // Footer separator line (full content width)
+  // Footer separator line (content width, left-right margin)
   slide.addShape("rect", {
     x: CX, y: FOOTER_Y, w: CW, h: 0.01,
     fill: { color: "E0E0E0" }, line: { color: "E0E0E0" },
   });
 
-  // Footer center: logo+date group centered across the full slide width
-  const FY      = FOOTER_Y + 0.08;
-  const FH      = 0.16;
-  const GAP     = 0.12;
-  const DATE_W  = date ? 0.7 : 0;
-  const FONT_SZ = 6.5;
-
+  // Footer: logo+date centered
   if (companyLogo) {
-    const logoH  = FH;
-    const logoW  = 0.9;
-    const totalW = logoW + (date ? GAP + DATE_W : 0);
-    const startX = (SW - totalW) / 2;
-    try {
-      slide.addImage({
-        data: companyLogo,
-        x: startX,
-        y: FY,
-        w: logoW,
-        h: logoH,
-      });
-    } catch { /* fallback: render text instead */
-      slide.addText("KANSAI SUPER STUDIO", {
-        x: startX, y: FY, w: logoW, h: FH,
-        fontFace: FONT, fontSize: FONT_SZ, bold: true, color: "B8B8B8",
-        align: "right", valign: "middle", margin: 0,
-      });
-    }
-    if (date) {
-      slide.addText(date, {
-        x: startX + logoW + GAP, y: FY, w: DATE_W, h: FH,
-        fontFace: FONT, fontSize: FONT_SZ, color: "B8B8B8",
-        align: "left", valign: "middle", margin: 0,
-      });
-    }
+    addFooterLogo(slide, companyLogo, date);
   } else {
-    const LOGO_W = 1.3;
-    const totalW = LOGO_W + (date ? GAP + DATE_W : 0);
-    const startX = (SW - totalW) / 2;
-    slide.addText("KANSAI SUPER STUDIO", {
-      x: startX, y: FY, w: LOGO_W, h: FH,
-      fontFace: FONT, fontSize: FONT_SZ, bold: true, color: "B8B8B8",
-      align: "right", valign: "middle", margin: 0,
-    });
-    if (date) {
-      slide.addText(date, {
-        x: startX + LOGO_W + GAP, y: FY, w: DATE_W, h: FH,
-        fontFace: FONT, fontSize: FONT_SZ, color: "B8B8B8",
-        align: "left", valign: "middle", margin: 0,
-      });
-    }
+    addFooterText(slide, date);
   }
 
-  // Page number (right-aligned, fits within SW)
-  txt(slide, `${pageNum} / ${totalPages}`, SW - M - 1.8, FOOTER_Y + 0.06, 1.8, FOOTER_H - 0.08, {
+  // Page number (right-aligned, within slide)
+  txt(slide, `${pageNum} / ${totalPages}`, SW - M - 1.8, FOOTER_Y + 0.06, 1.8, 0.32, {
     fontSize: 8, color: "BBBBBB", align: "right", valign: "middle",
   });
 
@@ -682,11 +681,20 @@ function addContentSlide(
   companyLogo: string
 ) {
   const slide = pptx.addSlide();
+
+  // White background as first shape — prevents any master/template shape from bleeding through
+  slide.addShape("rect", {
+    x: 0, y: 0, w: SW, h: SH,
+    fill: { color: WHITE }, line: { color: WHITE },
+  });
+
   const layoutName = getLayoutName(selectedSlide.sectionKey, selectedSlide.type);
   const sectionLabel =
     selectedSlide.slideIndexInSection > 1
       ? `${selectedSlide.sectionName}（${selectedSlide.slideIndexInSection}）`
       : selectedSlide.sectionName;
+
+  console.log(`[PPTX] Slide ${pageNum}: ${sectionLabel} / ${layoutName}`);
 
   addShell(pptx, slide, sectionLabel, layoutName, pageNum, totalPages, date, companyLogo);
 
@@ -698,7 +706,9 @@ function addContentSlide(
     case "schedule":        renderSchedule(slide, selectedSlide.type); break;
     case "pricing":         renderPricing(slide, selectedSlide.type);  break;
     case "company":         renderCompany(slide, selectedSlide.type);  break;
-    default: box(slide, CX, CY, CW, CH, selectedSlide.sectionName);
+    default:
+      console.log(`[PPTX] Unknown sectionKey: ${selectedSlide.sectionKey} — rendering generic placeholder`);
+      box(slide, CX, CY, CW, CH, selectedSlide.sectionName);
   }
 }
 
