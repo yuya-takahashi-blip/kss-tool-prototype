@@ -67,19 +67,26 @@ function txt(
 }
 
 /**
- * Right-pointing arrow using the ▶ text character.
- * Using addText avoids pptxgenjs v4 preset-shape bleeding across slides.
- * ▶ (U+25B6) renders as a solid filled right-pointing triangle in all major fonts.
+ * Arrow drawn with rect (shaft) + triangle (head, rotated 90° to point right).
+ * Both are standard OOXML preset shapes that render correctly in PowerPoint.
  */
 function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
-  sl.addText("▶", {
-    x, y, w, h,
-    fontFace: "Arial",
-    fontSize: Math.round(h * 56),
-    color: RED,
-    align: "center",
-    valign: "middle",
-    bold: false,
+  const shaftW = w * 0.62;
+  const shaftH = Math.max(h * 0.30, 0.07);
+  const headW  = w - shaftW + 0.01; // 0.01 overlap to avoid gap
+  const headH  = h;
+  const shaftY = y + (h - shaftH) / 2;
+
+  // Shaft
+  sl.addShape("rect", {
+    x, y: shaftY, w: shaftW, h: shaftH,
+    fill: { color: RED }, line: { color: RED, width: 0 },
+  });
+  // Head — pptxgenjs default "triangle" points upward; rotate 90° clockwise = points right
+  sl.addShape("triangle", {
+    x: x + shaftW - 0.01, y, w: headW, h: headH,
+    rotate: 90,
+    fill: { color: RED }, line: { color: RED, width: 0 },
   });
 }
 
@@ -336,13 +343,13 @@ function renderItems(sl: Slide, type: PageType) {
 
 function renderSchedule(sl: Slide, type: PageType) {
   if (type === "A") {
-    // Horizontal timeline with milestone dots (rect replaces ellipse — avoids cross-slide bleed)
+    // Horizontal timeline with milestone dots (ellipse — scoped to schedule type A only)
     const milestones = ["Phase 1", "Phase 2", "Phase 3", "Phase 4"];
     const mw = CW / milestones.length;
     sl.addShape("rect", { x: CX, y: CY + CH / 2 - 0.05, w: CW, h: 0.1, fill: { color: "DDDDDD" }, line: { color: "DDDDDD" } });
     milestones.forEach((m, i) => {
       const mx = CX + mw * i + mw / 2;
-      sl.addShape("rect", { x: mx - 0.25, y: CY + CH / 2 - 0.25, w: 0.5, h: 0.5, fill: { color: RED }, line: { color: RED } });
+      sl.addShape("ellipse", { x: mx - 0.25, y: CY + CH / 2 - 0.25, w: 0.5, h: 0.5, fill: { color: RED }, line: { color: RED } });
       const isAbove = i % 2 === 0;
       txt(sl, m, mx - mw / 2 + 0.1, isAbove ? CY + 0.2 : CY + CH / 2 + 0.45, mw - 0.2, 1.0, { fontSize: 11, bold: true, align: "center", valign: "middle", color: DARK });
       box(sl, mx - mw / 2 + 0.2, isAbove ? CY + CH / 2 + 0.45 : CY + 0.2, mw - 0.4, CH / 2 - 0.75, "タスク内容", WHITE, "E0E0E0");
