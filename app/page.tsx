@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -13,7 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarIcon, FileText, Download, Loader2, GripVertical, Save, FilePlus } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { CalendarIcon, FileText, Download, Loader2, GripVertical, Save, FilePlus, ChevronDown, ChevronUp } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -66,14 +72,85 @@ interface SelectedSlide {
   slideIndexInSection: number;
 }
 
+// Flat key→value map for each section's content fields
+type PageContent = Record<string, string>;
+
 interface DraftData {
   title: string;
   date: string;
   clientName: string;
   pages: Array<{ sectionKey: string; checked: boolean; pageCount: number; type: PageType }>;
-  slideOrder: string[]; // ordered list of slide ids
+  slideOrder: string[];
+  pageContents: Record<string, PageContent>;
   savedAt: string;
 }
+
+// ─── Per-section field definitions ───────────────────────────────────────────
+interface FieldDef {
+  key: string;
+  label: string;
+  multiline?: boolean;
+}
+
+const COMMON_FIELDS: FieldDef[] = [
+  { key: "heading",  label: "見出し" },
+  { key: "body",     label: "本文",   multiline: true },
+  { key: "memo",     label: "補足メモ", multiline: true },
+];
+
+const SECTION_EXTRA_FIELDS: Record<string, FieldDef[]> = {
+  greeting: [
+    { key: "addressee",   label: "宛名" },
+    { key: "responsible", label: "担当者名" },
+  ],
+  brand: [
+    { key: "brandName",   label: "ブランド名" },
+    { key: "brandDesc",   label: "ブランド説明", multiline: true },
+    { key: "target",      label: "ターゲット層" },
+  ],
+  business_scheme: [
+    { key: "licensor",  label: "ライセンサー名" },
+    { key: "licensee",  label: "ライセンシー名" },
+    { key: "salesTo",   label: "販売先名" },
+    { key: "license",   label: "許諾内容",     multiline: true },
+    { key: "channel",   label: "販売チャネル" },
+  ],
+  cases: [
+    { key: "caseTitle",  label: "事例タイトル" },
+    { key: "company",    label: "実施企業名" },
+    { key: "period",     label: "実施時期" },
+    { key: "result",     label: "成果・実績", multiline: true },
+  ],
+  items: [
+    { key: "productName",     label: "商品名" },
+    { key: "productCategory", label: "商品カテゴリ" },
+    { key: "price",           label: "想定価格" },
+    { key: "productDesc",     label: "商品説明", multiline: true },
+  ],
+  schedule: [
+    { key: "startDate",    label: "開始時期" },
+    { key: "endDate",      label: "終了時期" },
+    { key: "milestones",   label: "主なマイルストーン", multiline: true },
+  ],
+  pricing: [
+    { key: "contractPeriod", label: "契約期間" },
+    { key: "royalty",        label: "ロイヤリティ条件", multiline: true },
+    { key: "minGuarantee",   label: "最低保証金" },
+    { key: "otherConditions",label: "その他条件", multiline: true },
+  ],
+  company: [
+    { key: "companyName", label: "会社名" },
+    { key: "address",     label: "所在地" },
+    { key: "business",    label: "事業内容", multiline: true },
+    { key: "achievements",label: "実績",    multiline: true },
+  ],
+};
+
+function getFieldsForSection(sectionKey: string): FieldDef[] {
+  return [...COMMON_FIELDS, ...(SECTION_EXTRA_FIELDS[sectionKey] ?? [])];
+}
+
+const EMPTY_CONTENT: PageContent = {};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "kss-tool-proposal-draft";
@@ -95,7 +172,6 @@ function loadDraft(): DraftData | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DraftData;
-    // Minimal validation
     if (!parsed.title || !Array.isArray(parsed.pages) || !Array.isArray(parsed.slideOrder)) return null;
     return parsed;
   } catch {
@@ -134,7 +210,7 @@ function todayString(): string {
   return `${y}/${mo}/${dy}`;
 }
 
-// ─── Rebuild slides from pages, then apply a saved order ─────────────────────
+// ─── Slide helpers ────────────────────────────────────────────────────────────
 function generateSelectedSlides(pages: PageConfig[]): SelectedSlide[] {
   return pages
     .filter((page) => page.checked)
@@ -156,16 +232,11 @@ function applySlideOrder(slides: SelectedSlide[], order: string[]): SelectedSlid
     const s = map.get(id);
     if (s) { ordered.push(s); map.delete(id); }
   }
-  // Append any new slides not in saved order (e.g. newly added sections)
   map.forEach((s) => ordered.push(s));
   return ordered;
 }
 
-// ─── Merge saved page settings onto initialPages ─────────────────────────────
-function mergePages(
-  base: PageConfig[],
-  saved: DraftData["pages"]
-): PageConfig[] {
+function mergePages(base: PageConfig[], saved: DraftData["pages"]): PageConfig[] {
   const savedMap = new Map(saved.map((s) => [s.sectionKey, s]));
   return base.map((p) => {
     const s = savedMap.get(p.sectionKey);
@@ -232,9 +303,91 @@ function DragOverlayThumbnail({ slide, index }: { slide: SelectedSlide; index: n
   );
 }
 
+// ─── PageContentForm component ────────────────────────────────────────────────
+interface PageContentFormProps {
+  sectionKey: string;
+  sectionName: string;
+  layoutName: string;
+  slideCount: number;
+  content: PageContent;
+  onContentChange: (sectionKey: string, fieldKey: string, value: string) => void;
+  defaultOpen?: boolean;
+}
+
+function PageContentForm({
+  sectionKey,
+  sectionName,
+  layoutName,
+  slideCount,
+  content,
+  onContentChange,
+  defaultOpen = false,
+}: PageContentFormProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  const fields = getFieldsForSection(sectionKey);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card className="bg-white border-gray-200 overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1 rounded-t-lg"
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-semibold text-sm text-gray-800 shrink-0">{sectionName}</span>
+                {slideCount > 1 && (
+                  <span className="text-xs text-gray-500 shrink-0">({slideCount}ページ)</span>
+                )}
+                <span className="text-xs font-medium px-2 py-0.5 bg-red-50 text-red-600 rounded whitespace-nowrap shrink-0">
+                  {layoutName}
+                </span>
+              </div>
+              {open ? (
+                <ChevronUp className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
+              )}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {fields.map((field) =>
+                field.multiline ? (
+                  <div key={field.key} className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs font-medium text-gray-600">{field.label}</Label>
+                    <Textarea
+                      value={content[field.key] ?? ""}
+                      onChange={(e) => onContentChange(sectionKey, field.key, e.target.value)}
+                      placeholder={field.label + "を入力"}
+                      className="min-h-[88px] text-base resize-y leading-relaxed"
+                    />
+                  </div>
+                ) : (
+                  <div key={field.key} className="space-y-1.5">
+                    <Label className="text-xs font-medium text-gray-600">{field.label}</Label>
+                    <Input
+                      value={content[field.key] ?? ""}
+                      onChange={(e) => onContentChange(sectionKey, field.key, e.target.value)}
+                      placeholder={field.label + "を入力"}
+                      className="h-11 text-base"
+                    />
+                  </div>
+                )
+              )}
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
-  // Initialize state lazily so localStorage is read only on first render (client only)
   const [title, setTitle] = useState("企画書タイトル");
   const [date, setDate] = useState("2026/06/30");
   const [clientName, setClientName] = useState("");
@@ -242,16 +395,17 @@ export default function Home() {
   const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>(() =>
     generateSelectedSlides(initialPages)
   );
+  const [pageContents, setPageContents] = useState<Record<string, PageContent>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [restoreMessage, setRestoreMessage] = useState(""); // 復元通知（ヘッダー）
-  const [saveMessage, setSaveMessage] = useState("");       // 保存通知（ボタン付近）
+  const [restoreMessage, setRestoreMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
   const [saveStatus, setSaveStatus] = useState<"success" | "error" | "">("");
   const [savedAt, setSavedAt] = useState<string>("");
   const didRestoreRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Restore from localStorage on mount (runs client-side only) ──────────────
+  // ── Restore ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (didRestoreRef.current) return;
     didRestoreRef.current = true;
@@ -268,13 +422,22 @@ export default function Home() {
     setClientName(draft.clientName ?? "");
     setPages(restoredPages);
     setSelectedSlides(orderedSlides);
+    setPageContents(draft.pageContents && typeof draft.pageContents === "object" ? draft.pageContents : {});
     setSavedAt(draft.savedAt ?? "");
 
     setRestoreMessage("前回の内容を復元しました");
     setTimeout(() => setRestoreMessage(""), 3000);
   }, []);
 
-  // ── Save handler ─────────────────────────────────────────────────────────────
+  // ── Content change ───────────────────────────────────────────────────────────
+  const handleContentChange = (sectionKey: string, fieldKey: string, value: string) => {
+    setPageContents((prev) => ({
+      ...prev,
+      [sectionKey]: { ...(prev[sectionKey] ?? EMPTY_CONTENT), [fieldKey]: value },
+    }));
+  };
+
+  // ── Save ──────────────────────────────────────────────────────────────────────
   const handleSave = () => {
     const now = new Date().toISOString();
     const draft: DraftData = {
@@ -285,6 +448,7 @@ export default function Home() {
         sectionKey, checked, pageCount, type,
       })),
       slideOrder: selectedSlides.map((s) => s.id),
+      pageContents,
       savedAt: now,
     };
     const ok = saveDraft(draft);
@@ -303,7 +467,7 @@ export default function Home() {
     }, 3000);
   };
 
-  // ── New document handler ──────────────────────────────────────────────────────
+  // ── New document ──────────────────────────────────────────────────────────────
   const handleNew = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     setTitle("企画書タイトル");
@@ -311,6 +475,7 @@ export default function Home() {
     setClientName("");
     setPages(initialPages);
     setSelectedSlides(generateSelectedSlides(initialPages));
+    setPageContents({});
     setSavedAt("");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveMessage("新しい企画書を作成しました");
@@ -419,9 +584,6 @@ export default function Home() {
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────────
-  const getPreviewFields = (sectionKey: string): string[] =>
-    pages.find((p) => p.sectionKey === sectionKey)?.previewFields || [];
-
   const slidesBySection = selectedSlides.reduce(
     (acc, slide) => {
       if (!acc[slide.sectionKey]) acc[slide.sectionKey] = [];
@@ -517,7 +679,6 @@ export default function Home() {
                       key={page.sectionKey}
                       className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
                     >
-                      {/* 1行目：チェックボックス＋ページ名全文 */}
                       <div className="flex items-center gap-3">
                         <Checkbox
                           id={page.sectionKey}
@@ -534,12 +695,9 @@ export default function Home() {
                           {page.sectionName}
                         </Label>
                       </div>
-                      {/* 2行目：ページ数＋構成選択 */}
                       <div className="flex items-center gap-2 ml-8">
                         <div className="flex items-center gap-1 shrink-0">
-                          <Label className="text-xs text-gray-500 whitespace-nowrap">
-                            ページ数
-                          </Label>
+                          <Label className="text-xs text-gray-500 whitespace-nowrap">ページ数</Label>
                           <Input
                             type="number"
                             min="1"
@@ -674,7 +832,6 @@ export default function Home() {
               {savedAt ? `最終保存：${formatDateTime(savedAt)}` : "最終保存：未保存"}
             </span>
           </div>
-          {/* Save / action message banner */}
           {saveMessage && (
             <div
               className={[
@@ -689,6 +846,37 @@ export default function Home() {
           )}
         </div>
 
+        {/* Page Content Input */}
+        <Card className="mb-4 bg-white border-gray-200">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-lg font-semibold text-gray-800">ページ内容入力</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {selectedSlides.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">ページが選択されていません</div>
+            ) : (
+              <div className="space-y-3">
+                {orderedSectionKeys.map((sectionKey, idx) => {
+                  const sectionSlides = slidesBySection[sectionKey];
+                  const firstSlide = sectionSlides[0];
+                  return (
+                    <PageContentForm
+                      key={sectionKey}
+                      sectionKey={sectionKey}
+                      sectionName={firstSlide.sectionName}
+                      layoutName={getLayoutName(sectionKey, firstSlide.type)}
+                      slideCount={sectionSlides.length}
+                      content={pageContents[sectionKey] ?? EMPTY_CONTENT}
+                      onContentChange={handleContentChange}
+                      defaultOpen={idx === 0}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Page-Specific Preview Cards */}
         <Card className="bg-white border-gray-200">
           <CardHeader className="pb-2 px-4 pt-4">
@@ -702,6 +890,8 @@ export default function Home() {
                 {orderedSectionKeys.map((sectionKey) => {
                   const sectionSlides = slidesBySection[sectionKey];
                   const firstSlide = sectionSlides[0];
+                  const content = pageContents[sectionKey] ?? EMPTY_CONTENT;
+                  const previewHeading = content.heading || content.brandName || content.companyName || "";
 
                   return (
                     <Card key={sectionKey} className="bg-gray-50 border border-gray-200 overflow-hidden">
@@ -721,19 +911,13 @@ export default function Home() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-4">
-                        <div className="space-y-2">
-                          <div className="text-xs font-medium text-gray-700 mb-2">入力項目:</div>
-                          {getPreviewFields(sectionKey).map((field, idx) => (
-                            <div
-                              key={idx}
-                              className="text-sm text-gray-600 bg-white px-3 py-2 rounded border border-gray-200"
-                            >
-                              {field}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <div className="aspect-[16/9] bg-gray-200 rounded flex items-center justify-center">
+                        <div className="mt-0 pt-0">
+                          <div className="aspect-[16/9] bg-gray-200 rounded flex flex-col items-center justify-center gap-1 px-3">
+                            {previewHeading ? (
+                              <div className="text-sm font-medium text-gray-700 text-center line-clamp-2">
+                                {previewHeading}
+                              </div>
+                            ) : null}
                             <div className="text-xs text-gray-400">簡易プレビュー</div>
                           </div>
                         </div>
