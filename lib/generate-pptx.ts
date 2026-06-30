@@ -67,27 +67,19 @@ function txt(
 }
 
 /**
- * Arrow indicator drawn with rect shapes only.
- * (Avoids pptxgenjs "rightArrow" preset which can bleed into other slides in v4.)
+ * Right-pointing arrow using the ▶ text character.
+ * Using addText avoids pptxgenjs v4 preset-shape bleeding across slides.
+ * ▶ (U+25B6) renders as a solid filled right-pointing triangle in all major fonts.
  */
 function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
-  const mid   = y + h / 2;
-  const stemH = Math.max(h * 0.28, 0.06);
-  const stemW = w * 0.65;
-  const headW = w - stemW;
-  const headH = h;
-
-  // Arrow body
-  sl.addShape("rect", {
-    x, y: mid - stemH / 2, w: stemW, h: stemH,
-    fill: { color: RED }, line: { color: RED, width: 0 },
-  });
-  // Arrowhead (solid triangle approximated by a narrowing rect — right-side rectangle)
-  // We draw it as a pentagon using the `pentagon` preset shape rotated 90°, but to avoid
-  // any preset issues we just use a shorter rect that visually suggests direction.
-  sl.addShape("rect", {
-    x: x + stemW, y: mid - headH / 2, w: headW, h: headH,
-    fill: { color: RED }, line: { color: RED, width: 0 },
+  sl.addText("▶", {
+    x, y, w, h,
+    fontFace: "Arial",
+    fontSize: Math.round(h * 56),
+    color: RED,
+    align: "center",
+    valign: "middle",
+    bold: false,
   });
 }
 
@@ -278,8 +270,8 @@ function renderBusinessScheme(sl: Slide, type: PageType) {
     for (let i = 0; i < 4; i++) {
       const cx2 = CX + i * (bw + gap);
       sl.addShape("rect", { x: cx2, y: by, w: bw, h: bh, fill: { color: WHITE }, line: { color: RED, width: 1.2 } });
-      // Step circle (ellipse intentional — schedule timeline ALSO uses ellipse, both are correct per-page)
-      sl.addShape("ellipse", { x: cx2 + bw / 2 - cr, y: by + 0.2, w: cr * 2, h: cr * 2, fill: { color: RED }, line: { color: RED } });
+      // Step number square (rect replaces ellipse — avoids pptxgenjs v4 ellipse cross-slide bleed)
+      sl.addShape("rect", { x: cx2 + bw / 2 - cr, y: by + 0.2, w: cr * 2, h: cr * 2, fill: { color: RED }, line: { color: RED } });
       txt(sl, String(i + 1), cx2 + bw / 2 - cr, by + 0.2, cr * 2, cr * 2, { fontSize: 13, bold: true, color: WHITE, align: "center", valign: "middle" });
       txt(sl, steps[i], cx2, by + 1.05, bw, 1.1, { fontSize: 12, align: "center", valign: "middle", color: DARK, wrap: true });
       if (i < 3) drawArrow(sl, cx2 + bw + 0.04, by + bh / 2 - 0.2, aw, 0.4);
@@ -344,13 +336,13 @@ function renderItems(sl: Slide, type: PageType) {
 
 function renderSchedule(sl: Slide, type: PageType) {
   if (type === "A") {
-    // Horizontal timeline with milestone dots (ellipses intentional)
+    // Horizontal timeline with milestone dots (rect replaces ellipse — avoids cross-slide bleed)
     const milestones = ["Phase 1", "Phase 2", "Phase 3", "Phase 4"];
     const mw = CW / milestones.length;
     sl.addShape("rect", { x: CX, y: CY + CH / 2 - 0.05, w: CW, h: 0.1, fill: { color: "DDDDDD" }, line: { color: "DDDDDD" } });
     milestones.forEach((m, i) => {
       const mx = CX + mw * i + mw / 2;
-      sl.addShape("ellipse", { x: mx - 0.25, y: CY + CH / 2 - 0.25, w: 0.5, h: 0.5, fill: { color: RED }, line: { color: RED } });
+      sl.addShape("rect", { x: mx - 0.25, y: CY + CH / 2 - 0.25, w: 0.5, h: 0.5, fill: { color: RED }, line: { color: RED } });
       const isAbove = i % 2 === 0;
       txt(sl, m, mx - mw / 2 + 0.1, isAbove ? CY + 0.2 : CY + CH / 2 + 0.45, mw - 0.2, 1.0, { fontSize: 11, bold: true, align: "center", valign: "middle", color: DARK });
       box(sl, mx - mw / 2 + 0.2, isAbove ? CY + CH / 2 + 0.45 : CY + 0.2, mw - 0.4, CH / 2 - 0.75, "タスク内容", WHITE, "E0E0E0");
@@ -465,8 +457,8 @@ function renderCompany(sl: Slide, type: PageType) {
     sl.addShape("rect", { x: CX + 0.4, y: tly + 0.6, w: 0.05, h: CH - infoH - 0.9, fill: { color: "DDDDDD" }, line: { color: "DDDDDD" } });
     for (let i = 0; i < 3; i++) {
       const ey = tly + 0.65 + i * 1.0;
-      // Timeline dot (ellipse) — intentional, scoped to company type B only
-      sl.addShape("ellipse", { x: CX + 0.24, y: ey, w: 0.32, h: 0.32, fill: { color: RED }, line: { color: RED } });
+      // Timeline dot — rect replaces ellipse to prevent pptxgenjs v4 cross-slide bleeding
+      sl.addShape("rect", { x: CX + 0.24, y: ey, w: 0.32, h: 0.32, fill: { color: RED }, line: { color: RED } });
       box(sl, CX + 0.8, ey, CW - 0.8, 0.75, `実績 ${i + 1}`, WHITE, "E0E0E0");
     }
   } else {
