@@ -18,7 +18,19 @@ interface Props {
 
 // ── Shared micro-components ──────────────────────────────────────────────────
 
-function ImgBox({ className = "" }: { className?: string }) {
+function ImgBox({ src, fit = "cover", className = "" }: { src?: string; fit?: "cover" | "contain"; className?: string }) {
+  if (src) {
+    return (
+      <div className={`bg-gray-100 rounded overflow-hidden shrink-0 ${className}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt=""
+          className={`w-full h-full ${fit === "cover" ? "object-cover" : "object-contain"}`}
+        />
+      </div>
+    );
+  }
   return (
     <div className={`bg-gray-200 rounded flex items-center justify-center shrink-0 ${className}`}>
       <div className="w-3 h-3 rounded-full bg-gray-300" />
@@ -133,6 +145,7 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
         return (
           <div className="w-full h-full flex p-1.5 gap-1.5">
             <div className="flex-1 flex flex-col gap-0.5 min-w-0 justify-between">
+              <ImgBox src={content.brandLogo} fit="contain" className="w-full h-6" />
               <Val v={content.brandName} fallback="ブランド名" cls="text-[9px] font-bold text-red-600 line-clamp-1" />
               {content.brandDesc ? (
                 <p className="text-[7px] text-gray-600 line-clamp-2 leading-snug flex-1 mt-0.5">{content.brandDesc}</p>
@@ -143,14 +156,14 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
               )}
               <Val v={content.target} fallback="ターゲット層" cls="text-[7px] text-gray-400 line-clamp-1" />
             </div>
-            <ImgBox className="w-5/12 rounded" />
+            <ImgBox src={content.keyVisual} fit="cover" className="w-5/12 rounded" />
           </div>
         );
       }
       if (type === "B") {
         return (
           <div className="w-full h-full flex flex-col p-1 gap-1">
-            <ImgBox className="flex-1" />
+            <ImgBox src={content.keyVisual} fit="cover" className="flex-1" />
             <div className="flex items-center justify-between gap-1 shrink-0">
               <Val v={content.brandName} fallback="ブランド名" cls="text-[8px] font-bold text-gray-800 flex-1 line-clamp-1" />
               <Val v={content.target} fallback="" cls="text-[7px] text-gray-400 shrink-0 line-clamp-1" />
@@ -233,7 +246,7 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
       if (type === "A") {
         return (
           <div className="w-full h-full flex p-1.5 gap-1.5">
-            <ImgBox className="w-5/12 shrink-0" />
+            <ImgBox src={content.caseImage1} fit="cover" className="w-5/12 shrink-0" />
             <div className="flex-1 flex flex-col gap-0.5 min-w-0 justify-between">
               <Val
                 v={content.caseTitle || h}
@@ -255,13 +268,13 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
           <div className="w-full h-full flex flex-col p-1.5 gap-1">
             <Val v={h} fallback="" cls="text-[8px] font-semibold text-gray-700 line-clamp-1" />
             <div className="flex-1 flex gap-1">
-              {[content.caseTitle || "事例1", "事例2", "事例3"].map((t, i) => (
+              {([content.caseImage1, content.caseImage2, content.caseImage3] as string[]).map((src, i) => (
                 <div
                   key={i}
                   className="flex-1 border border-gray-200 rounded overflow-hidden flex flex-col"
                 >
-                  <ImgBox className="flex-1 rounded-none" />
-                  <div className="text-[7px] text-gray-600 px-1 py-0.5 truncate">{t}</div>
+                  <ImgBox src={src} fit="cover" className="flex-1 rounded-none" />
+                  <div className="text-[7px] text-gray-600 px-1 py-0.5 truncate">{`事例${i + 1}`}</div>
                 </div>
               ))}
             </div>
@@ -299,7 +312,7 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
       if (type === "A") {
         return (
           <div className="w-full h-full flex flex-col p-1.5 gap-1">
-            <ImgBox className="flex-1" />
+            <ImgBox src={content.productImage1} fit="contain" className="flex-1" />
             <div className="flex items-center justify-between gap-1 shrink-0">
               <Val v={content.productName} fallback="商品名" cls="text-[8px] font-semibold text-gray-800 flex-1 line-clamp-1" />
               <Val v={content.price} fallback="" cls="text-[7px] text-red-500 shrink-0" />
@@ -313,10 +326,10 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
           <div className="w-full h-full flex flex-col p-1.5 gap-1">
             <Val v={h} fallback="" cls="text-[8px] font-semibold text-gray-700 line-clamp-1 shrink-0" />
             <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-1">
-              <ImgBox />
-              <ImgBox />
-              <ImgBox />
-              <ImgBox />
+              <ImgBox src={content.productImage1} fit="contain" />
+              <ImgBox src={content.productImage2} fit="contain" />
+              <ImgBox src={content.productImage3} fit="contain" />
+              <ImgBox src={content.productImage4} fit="contain" />
             </div>
           </div>
         );
@@ -324,9 +337,9 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
       // C: scene + product
       return (
         <div className="w-full h-full flex p-1.5 gap-1.5">
-          <ImgBox className="flex-1" />
+          <ImgBox src={content.sceneImage} fit="cover" className="flex-1" />
           <div className="w-5/12 shrink-0 flex flex-col gap-1">
-            <ImgBox className="flex-1" />
+            <ImgBox src={content.productImage1} fit="contain" className="flex-1" />
             <Val v={content.productName} fallback="商品名" cls="text-[7px] text-gray-700 line-clamp-1 shrink-0" />
           </div>
         </div>

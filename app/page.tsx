@@ -157,6 +157,57 @@ const SECTION_EXTRA_FIELDS: Record<string, FieldDef[]> = {
   ],
 };
 
+// ─── Image field definitions ─────────────────────────────────────────────────
+interface ImageFieldDef { key: string; label: string; }
+
+const SECTION_IMAGE_FIELDS: Record<string, ImageFieldDef[]> = {
+  brand: [
+    { key: "brandLogo",  label: "ブランドロゴ画像" },
+    { key: "keyVisual",  label: "キービジュアル画像" },
+  ],
+  cases: [
+    { key: "caseImage1", label: "事例画像1" },
+    { key: "caseImage2", label: "事例画像2" },
+    { key: "caseImage3", label: "事例画像3" },
+  ],
+  items: [
+    { key: "productImage1", label: "商品画像1" },
+    { key: "productImage2", label: "商品画像2" },
+    { key: "productImage3", label: "商品画像3" },
+    { key: "productImage4", label: "商品画像4" },
+    { key: "sceneImage",    label: "使用シーン画像" },
+  ],
+};
+
+// ─── Image compression ────────────────────────────────────────────────────────
+async function compressImage(file: File, maxWidth = 1200, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width  = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(src); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+      img.src = src;
+    };
+    reader.onerror = () => reject(new Error("ファイルの読み込みに失敗しました"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function getFieldsForSection(sectionKey: string): FieldDef[] {
   if (sectionKey === "greeting") return COVER_FIELDS;
   return [...COMMON_FIELDS, ...(SECTION_EXTRA_FIELDS[sectionKey] ?? [])];
@@ -376,6 +427,81 @@ function DragOverlayThumbnail({ slide, index, content, date, title, clientName, 
   );
 }
 
+// ─── ImageUploadField ─────────────────────────────────────────────────────────
+interface ImageUploadFieldProps {
+  fieldKey: string;
+  label: string;
+  value: string;
+  onChange: (key: string, value: string) => void;
+}
+
+function ImageUploadField({ fieldKey, label, value, onChange }: ImageUploadFieldProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    setError("");
+    try {
+      const dataUrl = await compressImage(file);
+      onChange(fieldKey, dataUrl);
+    } catch {
+      setError("画像の処理に失敗しました");
+    } finally {
+      setLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-gray-600">{label}</Label>
+      {value ? (
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={value}
+            alt={label}
+            className="h-14 w-24 object-contain border border-gray-200 rounded bg-gray-50 p-0.5"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(fieldKey, "")}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-md border border-gray-200 hover:border-red-300 min-h-[44px]"
+          >
+            <X className="w-3.5 h-3.5" />削除
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 flex-wrap">
+          <label
+            htmlFor={`img-${fieldKey}`}
+            className={`flex items-center gap-2 cursor-pointer min-h-[44px] px-4 rounded-md border border-gray-300 bg-gray-50 hover:bg-gray-100 text-sm text-gray-600 transition-colors select-none ${loading ? "opacity-60 pointer-events-none" : ""}`}
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400 shrink-0" />
+            ) : (
+              <Upload className="w-4 h-4 text-gray-400 shrink-0" />
+            )}
+            <span>{loading ? "処理中..." : "画像を選択"}</span>
+            <input
+              id={`img-${fieldKey}`}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="sr-only"
+              onChange={handleFileChange}
+            />
+          </label>
+          <span className="text-xs text-gray-400">未設定：プレースホルダーを表示</span>
+        </div>
+      )}
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 // ─── PageContentForm ──────────────────────────────────────────────────────────
 interface PageContentFormProps {
   sectionKey: string;
@@ -398,7 +524,8 @@ function PageContentForm({
   open,
   onOpenChange,
 }: PageContentFormProps) {
-  const fields = getFieldsForSection(sectionKey);
+  const fields      = getFieldsForSection(sectionKey);
+  const imageFields = SECTION_IMAGE_FIELDS[sectionKey] ?? [];
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -430,7 +557,8 @@ function PageContentForm({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-5">
+            {/* Text fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {fields.map((field) =>
                 field.multiline ? (
@@ -456,6 +584,28 @@ function PageContentForm({
                 )
               )}
             </div>
+
+            {/* Image upload fields */}
+            {imageFields.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs font-medium text-gray-400 shrink-0">画像アップロード</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {imageFields.map((imgField) => (
+                    <ImageUploadField
+                      key={imgField.key}
+                      fieldKey={imgField.key}
+                      label={imgField.label}
+                      value={content[imgField.key] ?? ""}
+                      onChange={(key, val) => onContentChange(sectionKey, key, val)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -558,9 +708,22 @@ export default function Home() {
       savedAt: now,
     });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (ok) { setSavedAt(now); setSaveMessage("保存しました"); setSaveStatus("success"); }
-    else    { setSaveMessage("保存できませんでした"); setSaveStatus("error"); }
-    saveTimerRef.current = setTimeout(() => { setSaveMessage(""); setSaveStatus(""); }, 3000);
+    if (ok) {
+      setSavedAt(now);
+      setSaveMessage("保存しました");
+      setSaveStatus("success");
+    } else {
+      const hasImages = Object.values(pageContents).some((c) =>
+        Object.values(c).some((v) => typeof v === "string" && v.startsWith("data:image"))
+      );
+      setSaveMessage(
+        hasImages
+          ? "保存できませんでした（画像サイズが大きすぎる可能性があります）"
+          : "保存できませんでした"
+      );
+      setSaveStatus("error");
+    }
+    saveTimerRef.current = setTimeout(() => { setSaveMessage(""); setSaveStatus(""); }, 4000);
   };
 
   // ── New document ──────────────────────────────────────────────────────────
@@ -663,7 +826,7 @@ export default function Home() {
     }
     setExporting(true);
     try {
-      await generatePptx({ title, clientName, date, companyLogo, selectedSlides });
+      await generatePptx({ title, clientName, date, companyLogo, selectedSlides, pageContents });
       setSaveMessage("ダウンロードしました");
       setSaveStatus("success");
     } catch (err) {

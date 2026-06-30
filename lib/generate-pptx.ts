@@ -8,12 +8,15 @@ export interface SelectedSlide {
   slideIndexInSection: number;
 }
 
+export type SlideImages = Record<string, string>;
+
 export interface GeneratePptxOptions {
   title: string;
   clientName: string;
   date: string;
   companyLogo: string; // base64 data URL or "" for text fallback
   selectedSlides: SelectedSlide[];
+  pageContents?: Record<string, SlideImages>; // section-keyed image/content data
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -138,7 +141,31 @@ function drawCircle(sl: Slide, cx: number, cy: number, r: number, sectionKey: st
   });
 }
 
-// ─── Common header (every non-cover slide) ────────────────────────────────────
+/**
+ * Renders an uploaded image within the given box.
+ * Falls back to the grey placeholder when no image data is present or addImage throws.
+ * Uses pptxgenjs sizing.type to preserve aspect ratio without manual calculation.
+ */
+function addImageToSlide(
+  sl: Slide,
+  x: number, y: number, w: number, h: number,
+  dataUrl: string,
+  fit: "cover" | "contain",
+  placeholder: string
+) {
+  if (!dataUrl) {
+    box(sl, x, y, w, h, placeholder, PH, PH_B);
+    return;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (sl as any).addImage({ data: dataUrl, x, y, w, h, sizing: { type: fit } });
+  } catch {
+    box(sl, x, y, w, h, placeholder, PH, PH_B);
+  }
+}
+
+
 function addHeader(
   sl: Slide,
   sectionName: string,
@@ -252,14 +279,14 @@ function renderCover(pptx: any, title: string, clientName: string, date: string,
 
 // ─── Section renderers ────────────────────────────────────────────────────────
 
-function renderBrand(sl: Slide, type: PageType) {
+function renderBrand(sl: Slide, type: PageType, images: SlideImages) {
   if (type === "A") {
     const leftW = 2.8;
-    box(sl, CX, CY, leftW, 1.3, "ロゴ", PH, PH_B);
+    addImageToSlide(sl, CX, CY, leftW, 1.3, images.brandLogo ?? "", "contain", "ロゴ");
     box(sl, CX, CY + 1.5, leftW, CH - 1.5, "ブランド説明文", WHITE, "E0E0E0");
-    box(sl, CX + leftW + 0.3, CY, CW - leftW - 0.3, CH, "キービジュアル", PH, PH_B);
+    addImageToSlide(sl, CX + leftW + 0.3, CY, CW - leftW - 0.3, CH, images.keyVisual ?? "", "cover", "キービジュアル");
   } else if (type === "B") {
-    box(sl, CX, CY, CW, CH * 0.72, "世界観ビジュアル", PH, PH_B);
+    addImageToSlide(sl, CX, CY, CW, CH * 0.72, images.keyVisual ?? "", "cover", "世界観ビジュアル");
     box(sl, CX, CY + CH * 0.75, CW, CH * 0.25, "キャッチコピー・説明文", WHITE, "E0E0E0");
   } else {
     const colW = (CW - 0.4) / 3;
@@ -334,24 +361,25 @@ function renderBusinessScheme(sl: Slide, type: PageType, sectionKey: string) {
   }
 }
 
-function renderCases(sl: Slide, type: PageType) {
+function renderCases(sl: Slide, type: PageType, images: SlideImages) {
   if (type === "A") {
     const imgW  = CW * 0.42;
     const textX = CX + imgW + 0.25;
     const textW = CW - imgW - 0.25;
-    box(sl, CX,   CY,             imgW,  CH,              "導入事例イメージ",  PH,    PH_B);
+    addImageToSlide(sl, CX, CY, imgW, CH, images.caseImage1 ?? "", "cover", "導入事例イメージ");
     box(sl, textX, CY,             textW, 0.85,            "企業名・業種",      WHITE, "E0E0E0");
     box(sl, textX, CY + 1.0,       textW, CH - 1.0 - 0.85, "導入効果・コメント", WHITE, "E0E0E0");
     box(sl, textX, CY + CH - 0.8,  textW, 0.75,            "「お客様の声」",    WHITE, "E0E0E0");
   } else if (type === "B") {
     const colW = (CW - 0.4) / 3;
+    const imgKeys = ["caseImage1", "caseImage2", "caseImage3"] as const;
     for (let i = 0; i < 3; i++) {
       const cx2 = CX + i * (colW + 0.2);
-      box(sl, cx2, CY,           colW, CH * 0.45, `事例 ${i + 1} 画像`,  PH,    PH_B);
+      addImageToSlide(sl, cx2, CY, colW, CH * 0.45, images[imgKeys[i]] ?? "", "cover", `事例 ${i + 1} 画像`);
       box(sl, cx2, CY + CH * 0.48, colW, CH * 0.52, `事例 ${i + 1} テキスト`, WHITE, "E0E0E0");
     }
   } else {
-    // Before / After
+    // Before / After — no image slots
     const half = (CW - 0.35) / 2;
     sl.addShape("rect", { x: CX, y: CY, w: half, h: 0.55, fill: { color: RED },  line: { color: RED  } });
     txt(sl, "Before", CX, CY, half, 0.55, { fontSize: 15, bold: true, color: WHITE, align: "center", valign: "middle" });
@@ -364,28 +392,34 @@ function renderCases(sl: Slide, type: PageType) {
   }
 }
 
-function renderItems(sl: Slide, type: PageType) {
+function renderItems(sl: Slide, type: PageType, images: SlideImages) {
   // Items: image boxes, labels, descriptions only. No arrows, no red circles.
   if (type === "A") {
     const imgW  = CW * 0.52;
     const textX = CX + imgW + 0.25;
     const textW = CW - imgW - 0.25;
-    box(sl, CX,   CY,          imgW,  CH,         "商品画像", PH,    PH_B);
-    box(sl, textX, CY,          textW, 0.8,        "商品名",   WHITE, "E0E0E0");
-    box(sl, textX, CY + 0.95,   textW, 0.65,       "価格",     WHITE, "E0E0E0");
-    box(sl, textX, CY + 1.75,   textW, CH - 1.75,  "商品説明", WHITE, "E0E0E0");
+    addImageToSlide(sl, CX, CY, imgW, CH, images.productImage1 ?? "", "contain", "商品画像");
+    box(sl, textX, CY,         textW, 0.8,       "商品名",   WHITE, "E0E0E0");
+    box(sl, textX, CY + 0.95,  textW, 0.65,      "価格",     WHITE, "E0E0E0");
+    box(sl, textX, CY + 1.75,  textW, CH - 1.75, "商品説明", WHITE, "E0E0E0");
   } else if (type === "B") {
     const gw = (CW - 0.25) / 2;
     const gh = (CH - 0.25) / 2;
+    const imgKeys = ["productImage1", "productImage2", "productImage3", "productImage4"] as const;
+    let k = 0;
     for (let r = 0; r < 2; r++) {
       for (let c = 0; c < 2; c++) {
-        box(sl, CX + c * (gw + 0.25), CY + r * (gh + 0.25), gw, gh, `商品 ${r * 2 + c + 1}`, PH, PH_B);
+        addImageToSlide(
+          sl, CX + c * (gw + 0.25), CY + r * (gh + 0.25), gw, gh,
+          images[imgKeys[k]] ?? "", "contain", `商品 ${k + 1}`
+        );
+        k++;
       }
     }
   } else {
-    box(sl, CX,             CY,             CW,         CH * 0.58, "使用シーン画像", PH,    PH_B);
+    addImageToSlide(sl, CX, CY, CW, CH * 0.58, images.sceneImage ?? "", "cover", "使用シーン画像");
     box(sl, CX,             CY + CH * 0.62, CW * 0.55,  CH * 0.38, "商品説明",       WHITE, "E0E0E0");
-    box(sl, CX + CW * 0.58, CY + CH * 0.62, CW * 0.42, CH * 0.38, "商品画像",       PH,    PH_B);
+    addImageToSlide(sl, CX + CW * 0.58, CY + CH * 0.62, CW * 0.42, CH * 0.38, images.productImage1 ?? "", "contain", "商品画像");
   }
 }
 
@@ -539,7 +573,8 @@ function buildContentSlide(
   pageNum: number,
   totalPages: number,
   date: string,
-  companyLogo: string
+  companyLogo: string,
+  images: SlideImages
 ) {
   const sl = pptx.addSlide();
 
@@ -559,10 +594,10 @@ function buildContentSlide(
 
   // ③ Page-specific content (strictly isolated per sectionKey)
   switch (selectedSlide.sectionKey) {
-    case "brand":           renderBrand(sl,           selectedSlide.type); break;
+    case "brand":           renderBrand(sl,           selectedSlide.type, images); break;
     case "business_scheme": renderBusinessScheme(sl,  selectedSlide.type, selectedSlide.sectionKey); break;
-    case "cases":           renderCases(sl,           selectedSlide.type); break;
-    case "items":           renderItems(sl,           selectedSlide.type); break;
+    case "cases":           renderCases(sl,           selectedSlide.type, images); break;
+    case "items":           renderItems(sl,           selectedSlide.type, images); break;
     case "schedule":        renderSchedule(sl,        selectedSlide.type, selectedSlide.sectionKey); break;
     case "pricing":         renderPricing(sl,         selectedSlide.type); break;
     case "company":         renderCompany(sl,         selectedSlide.type); break;
@@ -610,7 +645,8 @@ export async function generatePptx(options: GeneratePptxOptions): Promise<void> 
 
   // Slides 2+: Content (each fully isolated)
   contentSlides.forEach((s, i) => {
-    buildContentSlide(pptx, s, i + 2, totalPages, options.date, options.companyLogo);
+    const images = options.pageContents?.[s.sectionKey] ?? {};
+    buildContentSlide(pptx, s, i + 2, totalPages, options.date, options.companyLogo, images);
   });
 
   // Download
