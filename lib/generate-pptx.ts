@@ -67,26 +67,59 @@ function txt(
 }
 
 /**
- * Arrow drawn with rect (shaft) + triangle (head, rotated 90° to point right).
- * Both are standard OOXML preset shapes that render correctly in PowerPoint.
+ * Arrow: rect shaft + two rotated rects forming a ">" arrowhead.
+ * ONLY rect shapes are used — triangle/rightArrow presets bleed to other slides in pptxgenjs v4.
+ * Rotation is an OOXML transform attribute on rect, not a different shape type, so it is safe.
  */
 function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
-  const shaftW = w * 0.62;
-  const shaftH = Math.max(h * 0.30, 0.07);
-  const headW  = w - shaftW + 0.01; // 0.01 overlap to avoid gap
-  const headH  = h;
-  const shaftY = y + (h - shaftH) / 2;
+  const mid    = y + h / 2;
+  const shaftH = Math.max(h * 0.28, 0.06);
+  const shaftW = w * 0.58;
+  const hx     = x + shaftW;
+  const hw     = w - shaftW;
 
   // Shaft
   sl.addShape("rect", {
-    x, y: shaftY, w: shaftW, h: shaftH,
+    x, y: mid - shaftH / 2, w: shaftW, h: shaftH,
     fill: { color: RED }, line: { color: RED, width: 0 },
   });
-  // Head — pptxgenjs default "triangle" points upward; rotate 90° clockwise = points right
-  sl.addShape("triangle", {
-    x: x + shaftW - 0.01, y, w: headW, h: headH,
-    rotate: 90,
+
+  // Arrowhead: two rotated rects whose centers lie on the upper/lower arm lines.
+  // Upper arm goes from (hx, y) to (hx+hw, mid).
+  // Lower arm goes from (hx, y+h) to (hx+hw, mid).
+  const armLen  = Math.sqrt(hw * hw + (h / 2) * (h / 2));
+  const armThk  = Math.max(h * 0.25, 0.055);
+  const angleDeg = Math.atan2(h / 2, hw) * (180 / Math.PI);
+
+  // Upper arm: center at (hx+hw/2, y+h/4), rotate clockwise by angleDeg
+  sl.addShape("rect", {
+    x: hx + hw / 2 - armLen / 2,
+    y: y + h / 4 - armThk / 2,
+    w: armLen, h: armThk,
+    rotate: angleDeg,
     fill: { color: RED }, line: { color: RED, width: 0 },
+  });
+
+  // Lower arm: center at (hx+hw/2, y+3h/4), rotate counter-clockwise by angleDeg
+  sl.addShape("rect", {
+    x: hx + hw / 2 - armLen / 2,
+    y: y + h * 3 / 4 - armThk / 2,
+    w: armLen, h: armThk,
+    rotate: -angleDeg,
+    fill: { color: RED }, line: { color: RED, width: 0 },
+  });
+}
+
+/**
+ * Solid circle using ● (U+25CF, BLACK CIRCLE).
+ * U+25CF has no emoji variation sequence — always renders as a plain geometric glyph.
+ * Using addText avoids pptxgenjs v4 ellipse cross-slide bleeding.
+ */
+function drawCircle(sl: Slide, cx: number, cy: number, r: number) {
+  sl.addText("●", {
+    x: cx - r, y: cy - r, w: r * 2, h: r * 2,
+    fontFace: FONT, fontSize: Math.round(r * 72 * 1.55),
+    color: RED, align: "center", valign: "middle",
   });
 }
 
@@ -349,7 +382,8 @@ function renderSchedule(sl: Slide, type: PageType) {
     sl.addShape("rect", { x: CX, y: CY + CH / 2 - 0.05, w: CW, h: 0.1, fill: { color: "DDDDDD" }, line: { color: "DDDDDD" } });
     milestones.forEach((m, i) => {
       const mx = CX + mw * i + mw / 2;
-      sl.addShape("ellipse", { x: mx - 0.25, y: CY + CH / 2 - 0.25, w: 0.5, h: 0.5, fill: { color: RED }, line: { color: RED } });
+      // Milestone dot — drawCircle(addText "●") avoids pptxgenjs v4 ellipse cross-slide bleed
+      drawCircle(sl, mx, CY + CH / 2, 0.25);
       const isAbove = i % 2 === 0;
       txt(sl, m, mx - mw / 2 + 0.1, isAbove ? CY + 0.2 : CY + CH / 2 + 0.45, mw - 0.2, 1.0, { fontSize: 11, bold: true, align: "center", valign: "middle", color: DARK });
       box(sl, mx - mw / 2 + 0.2, isAbove ? CY + CH / 2 + 0.45 : CY + 0.2, mw - 0.4, CH / 2 - 0.75, "タスク内容", WHITE, "E0E0E0");
