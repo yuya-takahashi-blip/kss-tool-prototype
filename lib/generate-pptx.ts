@@ -169,8 +169,6 @@ function addShell(
 function addCoverSlide(pptx: any, title: string, clientName: string, date: string, companyLogo: string) {
   const slide = pptx.addSlide();
 
-  // Full white background (default)
-
   // Top red accent strip
   slide.addShape("rect", {
     x: 0, y: 0, w: SW, h: 0.12,
@@ -182,40 +180,9 @@ function addCoverSlide(pptx: any, title: string, clientName: string, date: strin
     fill: { color: RED }, line: { color: RED },
   });
 
-  // Center layout: logo area + title + client + date
-  const centerX = SW / 2;
-  const logoY = 0.6;
-
-  // Company logo / text
-  if (companyLogo) {
-    slide.addImage({
-      data: companyLogo,
-      x: centerX - 1.8,
-      y: logoY,
-      w: 3.6,
-      h: 0.8,
-    });
-  } else {
-    // Text logo: KANSAI SUPER STUDIO
-    txt(slide, "KANSAI SUPER STUDIO", centerX - 3.5, logoY, 7, 0.7, {
-      fontSize: 20,
-      bold: true,
-      color: RED,
-      align: "center",
-      valign: "middle",
-      charSpacing: 3,
-    });
-  }
-
-  // Thin red separator
-  slide.addShape("rect", {
-    x: centerX - 1.5, y: logoY + 0.85, w: 3, h: 0.025,
-    fill: { color: RED }, line: { color: RED },
-  });
-
-  // Title
-  txt(slide, title || "企画書タイトル", M, 1.75, CW, 1.3, {
-    fontSize: 28,
+  // ── Title (largest) ──────────────────────────────────────────────────────
+  txt(slide, title || "企画書タイトル", M, 0.5, CW, 1.6, {
+    fontSize: 32,
     bold: true,
     color: title ? DARK : "CCCCCC",
     align: "center",
@@ -223,32 +190,46 @@ function addCoverSlide(pptx: any, title: string, clientName: string, date: strin
     wrap: true,
   });
 
-  // Separator line below title
+  // Thin separator below title
   slide.addShape("rect", {
-    x: centerX - 2.0, y: 3.2, w: 4.0, h: 0.015,
+    x: SW / 2 - 2.0, y: 2.25, w: 4.0, h: 0.015,
     fill: { color: "E0E0E0" }, line: { color: "E0E0E0" },
   });
 
-  // Client name label
-  txt(slide, "提案先", M, 3.35, CW, 0.35, {
-    fontSize: 9, color: "AAAAAA", align: "center", valign: "middle",
-  });
-  // Client name value
-  txt(slide, clientName || "株式会社〇〇", M, 3.7, CW, 0.65, {
-    fontSize: 18,
+  // ── Client name (second largest) ─────────────────────────────────────────
+  txt(slide, clientName || "提案先名", M, 2.35, CW, 0.9, {
+    fontSize: 22,
     bold: true,
     color: clientName ? DARK : "CCCCCC",
     align: "center",
     valign: "middle",
   });
 
-  // Date
-  txt(slide, date || "—", M, 4.45, CW, 0.4, {
-    fontSize: 11,
-    color: date ? MID : "CCCCCC",
-    align: "center",
-    valign: "middle",
-  });
+  // ── KANSAI SUPER STUDIO + date on one line (small, lower area) ───────────
+  const logoLine = date
+    ? `KANSAI SUPER STUDIO　${date}`
+    : "KANSAI SUPER STUDIO";
+
+  if (companyLogo) {
+    // Image logo (small, bottom area)
+    slide.addImage({
+      data: companyLogo,
+      x: SW / 2 - 1.2,
+      y: 3.55,
+      w: 2.4,
+      h: 0.45,
+    });
+    txt(slide, date || "", M, 4.05, CW, 0.35, {
+      fontSize: 9, color: "AAAAAA", align: "center", valign: "middle",
+    });
+  } else {
+    txt(slide, logoLine, M, 3.6, CW, 0.5, {
+      fontSize: 10,
+      color: MID,
+      align: "center",
+      valign: "middle",
+    });
+  }
 
   void pptx;
 }

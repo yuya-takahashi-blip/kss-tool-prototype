@@ -82,32 +82,28 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
   // ── Cover slide (表紙) ───────────────────────────────────────────────────
   if (isCover || sectionKey === "greeting") {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-white px-2 py-1 gap-0.5">
-        {/* Company logo / text */}
-        <div className="text-[8px] font-bold text-red-600 tracking-widest text-center leading-tight">
-          KANSAI SUPER STUDIO
-        </div>
-        <div className="w-8 h-px bg-red-400 my-0.5" />
-        {/* Title */}
+      <div className="w-full h-full flex flex-col items-center justify-center bg-white px-3 py-2 gap-1">
+        {/* Title — largest */}
         {(title || h) ? (
-          <div className="text-[9px] font-semibold text-gray-800 text-center leading-snug line-clamp-2">
+          <div className="text-[11px] font-bold text-gray-800 text-center leading-snug line-clamp-2">
             {title || h}
           </div>
         ) : (
-          <div className="text-[9px] text-gray-300 italic text-center">企画書タイトル</div>
+          <div className="text-[11px] text-gray-300 italic text-center font-semibold">企画書タイトル</div>
         )}
-        {/* Client */}
+        {/* Client — second */}
         {clientName ? (
-          <div className="text-[7px] text-gray-600 text-center line-clamp-1 mt-0.5">{clientName}</div>
+          <div className="text-[9px] font-semibold text-gray-700 text-center line-clamp-1">{clientName}</div>
         ) : (
-          <div className="text-[7px] text-gray-300 italic text-center mt-0.5">提案先名</div>
+          <div className="text-[9px] text-gray-300 italic text-center">提案先名</div>
         )}
-        {/* Date */}
-        {date ? (
-          <div className="text-[7px] text-gray-400 text-center mt-0.5">{date}</div>
-        ) : (
-          <div className="text-[7px] text-gray-300 italic text-center mt-0.5">日付</div>
-        )}
+        {/* KANSAI SUPER STUDIO + date on one line — small */}
+        <div className="text-[7px] text-gray-400 text-center leading-tight mt-0.5">
+          {[
+            "KANSAI SUPER STUDIO",
+            date || "",
+          ].filter(Boolean).join("　")}
+        </div>
       </div>
     );
   }
