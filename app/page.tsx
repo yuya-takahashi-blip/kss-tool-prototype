@@ -660,7 +660,8 @@ export default function Home() {
     (acc, s) => { (acc[s.sectionKey] ??= []).push(s); return acc; },
     {} as Record<string, SelectedSlide[]>
   );
-  const orderedSectionKeys = Array.from(new Set(selectedSlides.map((s) => s.sectionKey)));
+  const orderedSectionKeys = Array.from(new Set(selectedSlides.map((s) => s.sectionKey)))
+    .filter((key) => key !== "greeting"); // cover page uses basic info; no input form needed
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -877,8 +878,12 @@ export default function Home() {
             <CardTitle className="text-lg font-semibold text-gray-800">ページ内容入力</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            {selectedSlides.length === 0 ? (
-              <div className="text-center text-gray-400 py-8">ページが選択されていません</div>
+            {orderedSectionKeys.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                {selectedSlides.length === 0
+                  ? "ページが選択されていません"
+                  : "表紙以外のページを追加すると、ここに入力フォームが表示されます"}
+              </div>
             ) : (
               <div className="space-y-3">
                 {orderedSectionKeys.map((sectionKey) => {
