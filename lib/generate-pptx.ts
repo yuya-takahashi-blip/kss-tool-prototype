@@ -68,10 +68,12 @@ function txt(
 
 /**
  * Arrow: rect shaft + two rotated rects forming a ">" arrowhead.
- * ONLY rect shapes are used — triangle/rightArrow presets bleed to other slides in pptxgenjs v4.
- * Rotation is an OOXML transform attribute on rect, not a different shape type, so it is safe.
+ * Guard: only renders when sectionKey === "business_scheme".
+ * This prevents leaked rotated-rect shapes from appearing on other slides.
  */
-function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
+function drawArrow(sl: Slide, x: number, y: number, w: number, h: number, sectionKey: string) {
+  if (sectionKey !== "business_scheme") return;   // ← page guard
+
   const mid    = y + h / 2;
   const shaftH = Math.max(h * 0.28, 0.06);
   const shaftW = w * 0.58;
@@ -84,14 +86,11 @@ function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
     fill: { color: RED }, line: { color: RED, width: 0 },
   });
 
-  // Arrowhead: two rotated rects whose centers lie on the upper/lower arm lines.
-  // Upper arm goes from (hx, y) to (hx+hw, mid).
-  // Lower arm goes from (hx, y+h) to (hx+hw, mid).
-  const armLen  = Math.sqrt(hw * hw + (h / 2) * (h / 2));
-  const armThk  = Math.max(h * 0.25, 0.055);
+  // Arrowhead — two rotated rects forming ">"
+  const armLen   = Math.sqrt(hw * hw + (h / 2) * (h / 2));
+  const armThk   = Math.max(h * 0.25, 0.055);
   const angleDeg = Math.atan2(h / 2, hw) * (180 / Math.PI);
 
-  // Upper arm: center at (hx+hw/2, y+h/4), rotate clockwise by angleDeg
   sl.addShape("rect", {
     x: hx + hw / 2 - armLen / 2,
     y: y + h / 4 - armThk / 2,
@@ -100,7 +99,6 @@ function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
     fill: { color: RED }, line: { color: RED, width: 0 },
   });
 
-  // Lower arm: center at (hx+hw/2, y+3h/4), rotate counter-clockwise by angleDeg
   sl.addShape("rect", {
     x: hx + hw / 2 - armLen / 2,
     y: y + h * 3 / 4 - armThk / 2,
@@ -112,10 +110,12 @@ function drawArrow(sl: Slide, x: number, y: number, w: number, h: number) {
 
 /**
  * Solid circle using ● (U+25CF, BLACK CIRCLE).
- * U+25CF has no emoji variation sequence — always renders as a plain geometric glyph.
- * Using addText avoids pptxgenjs v4 ellipse cross-slide bleeding.
+ * Guard: only renders when sectionKey === "schedule".
+ * This prevents addText("●") from appearing on other slides.
  */
-function drawCircle(sl: Slide, cx: number, cy: number, r: number) {
+function drawCircle(sl: Slide, cx: number, cy: number, r: number, sectionKey: string) {
+  if (sectionKey !== "schedule") return;   // ← page guard
+
   sl.addText("●", {
     x: cx - r, y: cy - r, w: r * 2, h: r * 2,
     fontFace: FONT, fontSize: Math.round(r * 72 * 1.55),
@@ -256,7 +256,7 @@ function renderBrand(sl: Slide, type: PageType) {
   }
 }
 
-function renderBusinessScheme(sl: Slide, type: PageType) {
+function renderBusinessScheme(sl: Slide, type: PageType, sectionKey: string) {
   if (type === "A") {
     // 2 boxes + arrow — centered
     const bw = 4.4;
@@ -270,7 +270,7 @@ function renderBusinessScheme(sl: Slide, type: PageType) {
     sl.addShape("rect", { x: sx,           y: by, w: bw, h: bh, fill: { color: WHITE }, line: { color: RED, width: 1.5 } });
     txt(sl, "自社",       sx,           by, bw, bh, { fontSize: 18, bold: true, align: "center", valign: "middle", color: DARK });
 
-    drawArrow(sl, sx + bw + 0.2, by + bh / 2 - ah / 2, aw, ah);
+    drawArrow(sl, sx + bw + 0.2, by + bh / 2 - ah / 2, aw, ah, sectionKey);
 
     const b2x = sx + bw + aw + 0.4;
     sl.addShape("rect", { x: b2x,          y: by, w: bw, h: bh, fill: { color: WHITE }, line: { color: RED, width: 1.5 } });
@@ -293,7 +293,7 @@ function renderBusinessScheme(sl: Slide, type: PageType) {
       const cx2 = sx + i * (bw + aw + 0.3);
       sl.addShape("rect", { x: cx2, y: by, w: bw, h: bh, fill: { color: WHITE }, line: { color: RED, width: 1.5 } });
       txt(sl, labels[i], cx2, by, bw, bh, { fontSize: 16, bold: true, align: "center", valign: "middle", color: DARK });
-      if (i < 2) drawArrow(sl, cx2 + bw + 0.08, by + bh / 2 - ah / 2, aw, ah);
+      if (i < 2) drawArrow(sl, cx2 + bw + 0.08, by + bh / 2 - ah / 2, aw, ah, sectionKey);
     }
     txt(sl, "3者間スキームの流れ", CX, CY + CH - 0.55, CW, 0.45, { fontSize: 10, color: MID, align: "center" });
 
@@ -314,7 +314,7 @@ function renderBusinessScheme(sl: Slide, type: PageType) {
       sl.addShape("rect", { x: cx2 + bw / 2 - cr, y: by + 0.2, w: cr * 2, h: cr * 2, fill: { color: RED }, line: { color: RED } });
       txt(sl, String(i + 1), cx2 + bw / 2 - cr, by + 0.2, cr * 2, cr * 2, { fontSize: 13, bold: true, color: WHITE, align: "center", valign: "middle" });
       txt(sl, steps[i], cx2, by + 1.05, bw, 1.1, { fontSize: 12, align: "center", valign: "middle", color: DARK, wrap: true });
-      if (i < 3) drawArrow(sl, cx2 + bw + 0.04, by + bh / 2 - 0.2, aw, 0.4);
+      if (i < 3) drawArrow(sl, cx2 + bw + 0.04, by + bh / 2 - 0.2, aw, 0.4, sectionKey);
     }
   }
 }
@@ -374,7 +374,7 @@ function renderItems(sl: Slide, type: PageType) {
   }
 }
 
-function renderSchedule(sl: Slide, type: PageType) {
+function renderSchedule(sl: Slide, type: PageType, sectionKey: string) {
   if (type === "A") {
     // Horizontal timeline with milestone dots (ellipse — scoped to schedule type A only)
     const milestones = ["Phase 1", "Phase 2", "Phase 3", "Phase 4"];
@@ -382,8 +382,8 @@ function renderSchedule(sl: Slide, type: PageType) {
     sl.addShape("rect", { x: CX, y: CY + CH / 2 - 0.05, w: CW, h: 0.1, fill: { color: "DDDDDD" }, line: { color: "DDDDDD" } });
     milestones.forEach((m, i) => {
       const mx = CX + mw * i + mw / 2;
-      // Milestone dot — drawCircle(addText "●") avoids pptxgenjs v4 ellipse cross-slide bleed
-      drawCircle(sl, mx, CY + CH / 2, 0.25);
+      // Milestone dot — schedule-only (guard inside drawCircle enforces this)
+      drawCircle(sl, mx, CY + CH / 2, 0.25, sectionKey);
       const isAbove = i % 2 === 0;
       txt(sl, m, mx - mw / 2 + 0.1, isAbove ? CY + 0.2 : CY + CH / 2 + 0.45, mw - 0.2, 1.0, { fontSize: 11, bold: true, align: "center", valign: "middle", color: DARK });
       box(sl, mx - mw / 2 + 0.2, isAbove ? CY + CH / 2 + 0.45 : CY + 0.2, mw - 0.4, CH / 2 - 0.75, "タスク内容", WHITE, "E0E0E0");
@@ -433,7 +433,8 @@ function renderSchedule(sl: Slide, type: PageType) {
       txt(sl, p.name, cx2, CY + 1.0, bw, 1.2, { fontSize: 14, bold: true, align: "center", valign: "top", color: DARK });
       txt(sl, p.sub,  cx2, CY + 2.4, bw, 0.6, { fontSize: 11, align: "center", valign: "middle", color: MID });
       box(sl, cx2 + 0.25, CY + 3.2, bw - 0.5, CH - 3.4, "主なタスク", WHITE, "E0E0E0");
-      if (i < 2) drawArrow(sl, cx2 + bw + 0.04, CY + CH / 2 - 0.2, aw, 0.4);
+      // Phase separator — thin vertical divider only; drawArrow is forbidden in schedule
+      if (i < 2) sl.addShape("rect", { x: cx2 + bw + aw * 0.35, y: CY + 0.8, w: aw * 0.3, h: CH - 0.8, fill: { color: "DDDDDD" }, line: { color: "DDDDDD" } });
     });
   }
 }
@@ -544,10 +545,10 @@ function buildContentSlide(
   // ③ Page-specific content (strictly isolated per sectionKey)
   switch (selectedSlide.sectionKey) {
     case "brand":           renderBrand(sl,           selectedSlide.type); break;
-    case "business_scheme": renderBusinessScheme(sl,  selectedSlide.type); break;
+    case "business_scheme": renderBusinessScheme(sl,  selectedSlide.type, selectedSlide.sectionKey); break;
     case "cases":           renderCases(sl,           selectedSlide.type); break;
     case "items":           renderItems(sl,           selectedSlide.type); break;
-    case "schedule":        renderSchedule(sl,        selectedSlide.type); break;
+    case "schedule":        renderSchedule(sl,        selectedSlide.type, selectedSlide.sectionKey); break;
     case "pricing":         renderPricing(sl,         selectedSlide.type); break;
     case "company":         renderCompany(sl,         selectedSlide.type); break;
     default:
