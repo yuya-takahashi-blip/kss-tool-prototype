@@ -63,6 +63,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { layoutLabels, getLayoutName, type PageType } from "@/lib/layout-labels";
 import { generatePptx } from "@/lib/generate-pptx";
+import { SlideMiniPreview, type SlideContent } from "@/components/slide-mini-preview";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PageConfig {
@@ -71,7 +72,6 @@ interface PageConfig {
   checked: boolean;
   pageCount: number;
   type: PageType;
-  previewFields: string[];
 }
 
 interface SelectedSlide {
@@ -82,15 +82,13 @@ interface SelectedSlide {
   slideIndexInSection: number;
 }
 
-type PageContent = Record<string, string>;
-
 interface DraftData {
   title: string;
   date: string;
   clientName: string;
   pages: Array<{ sectionKey: string; checked: boolean; pageCount: number; type: PageType }>;
   slideOrder: string[];
-  pageContents: Record<string, PageContent>;
+  pageContents: Record<string, SlideContent>;
   savedAt: string;
 }
 
@@ -121,7 +119,7 @@ const SECTION_EXTRA_FIELDS: Record<string, FieldDef[]> = {
     { key: "licensor",  label: "ライセンサー名" },
     { key: "licensee",  label: "ライセンシー名" },
     { key: "salesTo",   label: "販売先名" },
-    { key: "license",   label: "許諾内容",     multiline: true },
+    { key: "license",   label: "許諾内容",      multiline: true },
     { key: "channel",   label: "販売チャネル" },
   ],
   cases: [
@@ -137,9 +135,9 @@ const SECTION_EXTRA_FIELDS: Record<string, FieldDef[]> = {
     { key: "productDesc",     label: "商品説明", multiline: true },
   ],
   schedule: [
-    { key: "startDate",   label: "開始時期" },
-    { key: "endDate",     label: "終了時期" },
-    { key: "milestones",  label: "主なマイルストーン", multiline: true },
+    { key: "startDate",  label: "開始時期" },
+    { key: "endDate",    label: "終了時期" },
+    { key: "milestones", label: "主なマイルストーン", multiline: true },
   ],
   pricing: [
     { key: "contractPeriod",  label: "契約期間" },
@@ -159,32 +157,20 @@ function getFieldsForSection(sectionKey: string): FieldDef[] {
   return [...COMMON_FIELDS, ...(SECTION_EXTRA_FIELDS[sectionKey] ?? [])];
 }
 
-// Keys shown in the detail preview card (excluding heading/body/memo)
-const PREVIEW_HIGHLIGHT_FIELDS: Record<string, string[]> = {
-  greeting:        ["addressee", "responsible"],
-  brand:           ["brandName", "target"],
-  business_scheme: ["licensor", "licensee", "salesTo"],
-  cases:           ["caseTitle", "company", "result"],
-  items:           ["productName", "productCategory", "price"],
-  schedule:        ["startDate", "endDate", "milestones"],
-  pricing:         ["contractPeriod", "royalty", "minGuarantee"],
-  company:         ["companyName", "address", "business"],
-};
-
-const EMPTY_CONTENT: PageContent = {};
+const EMPTY_CONTENT: SlideContent = {};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "kss-tool-proposal-draft";
 
 const initialPages: PageConfig[] = [
-  { sectionKey: "greeting",        sectionName: "ご挨拶",           checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "brand",           sectionName: "ブランド紹介",      checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "business_scheme", sectionName: "ビジネススキーム",  checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "cases",           sectionName: "事例紹介",          checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "items",           sectionName: "アイテムイメージ",   checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "schedule",        sectionName: "スケジュール",       checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "pricing",         sectionName: "料金・条件",         checked: true, pageCount: 1, type: "A", previewFields: [] },
-  { sectionKey: "company",         sectionName: "会社概要",           checked: true, pageCount: 1, type: "A", previewFields: [] },
+  { sectionKey: "greeting",        sectionName: "ご挨拶",           checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "brand",           sectionName: "ブランド紹介",      checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "business_scheme", sectionName: "ビジネススキーム",  checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "cases",           sectionName: "事例紹介",          checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "items",           sectionName: "アイテムイメージ",   checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "schedule",        sectionName: "スケジュール",       checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "pricing",         sectionName: "料金・条件",         checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "company",         sectionName: "会社概要",           checked: true,  pageCount: 1, type: "A" },
 ];
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
@@ -212,15 +198,8 @@ function saveDraft(data: DraftData): boolean {
 function formatDateTime(iso: string): string {
   try {
     const d = new Date(iso);
-    const y = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, "0");
-    const dy = String(d.getDate()).padStart(2, "0");
-    const h  = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${y}/${mo}/${dy} ${h}:${mi}`;
-  } catch {
-    return "";
-  }
+    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } catch { return ""; }
 }
 
 function todayString(): string {
@@ -261,21 +240,22 @@ function mergePages(base: PageConfig[], saved: DraftData["pages"]): PageConfig[]
     if (!s) return p;
     return {
       ...p,
-      checked:   typeof s.checked   === "boolean" ? s.checked   : p.checked,
-      pageCount: typeof s.pageCount  === "number"  && s.pageCount >= 1 ? s.pageCount : p.pageCount,
+      checked:   typeof s.checked === "boolean" ? s.checked : p.checked,
+      pageCount: typeof s.pageCount === "number" && s.pageCount >= 1 ? s.pageCount : p.pageCount,
       type:      (["A", "B", "C"] as PageType[]).includes(s.type as PageType) ? s.type : p.type,
     };
   });
 }
 
-// ─── Thumbnail (sortable) ─────────────────────────────────────────────────────
+// ─── Sortable thumbnail ───────────────────────────────────────────────────────
 interface ThumbnailProps {
   slide: SelectedSlide;
   index: number;
-  heading: string;
+  content: SlideContent;
+  onSelect: () => void;
 }
 
-function SortableThumbnail({ slide, index, heading }: ThumbnailProps) {
+function SortableThumbnail({ slide, index, content, onSelect }: ThumbnailProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
 
@@ -287,56 +267,63 @@ function SortableThumbnail({ slide, index, heading }: ThumbnailProps) {
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className={`bg-white rounded-lg border border-gray-200 overflow-hidden aspect-[4/3] flex flex-col hover:border-red-200 hover:shadow-sm transition-all ${isDragging ? "shadow-lg" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }}
+      className={`bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col aspect-[16/9] hover:border-red-300 hover:shadow-md transition-all ${isDragging ? "shadow-xl" : ""}`}
     >
-      {/* slide "header" bar */}
-      <div className="bg-red-600 px-2 py-1 flex items-center justify-between shrink-0">
-        <span className="text-white text-[10px] font-semibold truncate leading-tight">P.{index + 1}</span>
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-0.5 touch-none ml-1">
+      {/* Header bar */}
+      <div className="bg-red-600 px-2 py-[3px] flex items-center justify-between shrink-0">
+        <span className="text-white text-[9px] font-semibold truncate leading-tight flex-1 mr-1">
+          P.{index + 1} · {displayName}
+        </span>
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-0.5 -mr-0.5 touch-none shrink-0"
+        >
           <GripVertical className="w-3 h-3 text-red-200" />
         </div>
       </div>
-      {/* slide body */}
-      <div className="flex-1 flex flex-col justify-between p-2 min-h-0">
-        <div>
-          <div className="text-[11px] font-semibold text-gray-800 leading-snug line-clamp-1">{displayName}</div>
-          {heading ? (
-            <div className="text-[10px] text-gray-600 mt-0.5 line-clamp-2 leading-snug">{heading}</div>
-          ) : (
-            <div className="text-[10px] text-gray-300 mt-0.5 leading-snug">見出し未入力</div>
-          )}
-        </div>
-        <div className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded leading-tight self-start max-w-full truncate mt-1">
-          {getLayoutName(slide.sectionKey, slide.type)}
-        </div>
+
+      {/* Slide content — clickable */}
+      <div
+        className="flex-1 overflow-hidden cursor-pointer"
+        onClick={onSelect}
+        role="button"
+        aria-label={`${displayName}の入力フォームへ`}
+      >
+        <SlideMiniPreview
+          sectionKey={slide.sectionKey}
+          type={slide.type}
+          content={content}
+        />
+      </div>
+
+      {/* Footer: layout name */}
+      <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0">
+        <span className="text-[8px] text-gray-400 truncate block">{getLayoutName(slide.sectionKey, slide.type)}</span>
       </div>
     </div>
   );
 }
 
-function DragOverlayThumbnail({ slide, index, heading }: ThumbnailProps) {
+function DragOverlayThumbnail({ slide, index, content }: Omit<ThumbnailProps, "onSelect">) {
   const displayName =
     slide.slideIndexInSection > 1
       ? `${slide.sectionName} (${slide.slideIndexInSection})`
       : slide.sectionName;
   return (
-    <div className="bg-white rounded-lg border border-red-300 overflow-hidden aspect-[4/3] flex flex-col shadow-xl rotate-2 scale-105">
-      <div className="bg-red-600 px-2 py-1 shrink-0">
-        <span className="text-white text-[10px] font-semibold">P.{index + 1}</span>
+    <div className="bg-white rounded-lg border border-red-300 overflow-hidden flex flex-col aspect-[16/9] shadow-2xl rotate-1 scale-105">
+      <div className="bg-red-600 px-2 py-[3px] flex items-center justify-between shrink-0">
+        <span className="text-white text-[9px] font-semibold truncate leading-tight">
+          P.{index + 1} · {displayName}
+        </span>
+        <GripVertical className="w-3 h-3 text-red-200 shrink-0" />
       </div>
-      <div className="flex-1 flex flex-col justify-between p-2">
-        <div>
-          <div className="text-[11px] font-semibold text-gray-800 line-clamp-1">{displayName}</div>
-          {heading ? (
-            <div className="text-[10px] text-gray-600 mt-0.5 line-clamp-2">{heading}</div>
-          ) : (
-            <div className="text-[10px] text-gray-300 mt-0.5">見出し未入力</div>
-          )}
-        </div>
-        <div className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded self-start truncate mt-1">
-          {getLayoutName(slide.sectionKey, slide.type)}
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <SlideMiniPreview sectionKey={slide.sectionKey} type={slide.type} content={content} />
+      </div>
+      <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0">
+        <span className="text-[8px] text-gray-400 truncate block">{getLayoutName(slide.sectionKey, slide.type)}</span>
       </div>
     </div>
   );
@@ -348,9 +335,10 @@ interface PageContentFormProps {
   sectionName: string;
   layoutName: string;
   slideCount: number;
-  content: PageContent;
+  content: SlideContent;
   onContentChange: (sectionKey: string, fieldKey: string, value: string) => void;
-  defaultOpen?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 function PageContentForm({
@@ -360,26 +348,29 @@ function PageContentForm({
   slideCount,
   content,
   onContentChange,
-  defaultOpen = false,
+  open,
+  onOpenChange,
 }: PageContentFormProps) {
-  const [open, setOpen] = useState(defaultOpen);
   const fields = getFieldsForSection(sectionKey);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <Card className="bg-white border-gray-200 overflow-hidden">
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+      <Card
+        id={`form-section-${sectionKey}`}
+        className="bg-white border-gray-200 overflow-hidden scroll-mt-4"
+      >
         <CollapsibleTrigger asChild>
           <button
             type="button"
             className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1 rounded-t-lg"
           >
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
                 <span className="font-semibold text-sm text-gray-800 shrink-0">{sectionName}</span>
                 {slideCount > 1 && (
                   <span className="text-xs text-gray-500 shrink-0">({slideCount}ページ)</span>
                 )}
-                <span className="text-xs font-medium px-2 py-0.5 bg-red-50 text-red-600 rounded whitespace-nowrap shrink-0">
+                <span className="text-xs font-medium px-2 py-0.5 bg-red-50 text-red-600 rounded whitespace-nowrap shrink-0 hidden sm:inline">
                   {layoutName}
                 </span>
               </div>
@@ -425,109 +416,31 @@ function PageContentForm({
   );
 }
 
-// ─── SlidePreviewCard ─────────────────────────────────────────────────────────
-interface SlidePreviewCardProps {
-  sectionKey: string;
-  sectionName: string;
-  layoutName: string;
-  slideCount: number;
-  content: PageContent;
-}
-
-function SlidePreviewCard({
-  sectionKey,
-  sectionName,
-  layoutName,
-  slideCount,
-  content,
-}: SlidePreviewCardProps) {
-  const heading = content.heading || "";
-  const body    = content.body    || "";
-
-  // Highlight field entries for this section
-  const highlightKeys = PREVIEW_HIGHLIGHT_FIELDS[sectionKey] ?? [];
-  const allFields     = getFieldsForSection(sectionKey);
-  const highlights    = highlightKeys
-    .map((key) => {
-      const def = allFields.find((f) => f.key === key);
-      return def ? { label: def.label, value: content[key] ?? "" } : null;
-    })
-    .filter(Boolean) as { label: string; value: string }[];
-
-  const hasAnyContent = heading || body || highlights.some((h) => h.value);
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col">
-      {/* Card header – red bar mimicking a slide title area */}
-      <div className="bg-red-600 px-4 py-2.5 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-white text-sm font-semibold leading-tight truncate">
-            {sectionName}
-            {slideCount > 1 && (
-              <span className="text-red-200 text-xs ml-1.5">({slideCount}ページ)</span>
-            )}
-          </div>
-        </div>
-        <span className="text-xs font-medium px-2 py-0.5 bg-red-500 text-red-100 rounded whitespace-nowrap shrink-0">
-          {layoutName}
-        </span>
-      </div>
-
-      {/* Slide body */}
-      <div className="p-4 flex-1 flex flex-col gap-3">
-        {/* Heading */}
-        <div className="border-b border-gray-100 pb-3">
-          {heading ? (
-            <p className="text-base font-semibold text-gray-800 leading-snug">{heading}</p>
-          ) : (
-            <p className="text-sm text-gray-300 italic">{hasAnyContent ? "（見出し未入力）" : "見出し"}</p>
-          )}
-          {/* Body preview */}
-          {body ? (
-            <p className="text-sm text-gray-600 mt-1.5 leading-relaxed line-clamp-3">{body}</p>
-          ) : (
-            !hasAnyContent && <p className="text-xs text-gray-300 mt-1 italic">本文</p>
-          )}
-        </div>
-
-        {/* Highlight fields */}
-        {highlights.length > 0 && (
-          <div className="grid grid-cols-1 gap-1.5">
-            {highlights.map(({ label, value }) => (
-              <div key={label} className="flex items-baseline gap-2">
-                <span className="text-xs text-gray-400 shrink-0 w-28">{label}</span>
-                {value ? (
-                  <span className="text-sm text-gray-700 leading-snug line-clamp-2 flex-1">{value}</span>
-                ) : (
-                  <span className="text-xs text-gray-300 italic flex-1">未入力</span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Home() {
-  const [title, setTitle]             = useState("企画書タイトル");
-  const [date, setDate]               = useState("2026/06/30");
-  const [clientName, setClientName]   = useState("");
-  const [pages, setPages]             = useState<PageConfig[]>(initialPages);
+  const [title, setTitle]           = useState("企画書タイトル");
+  const [date, setDate]             = useState("2026/06/30");
+  const [clientName, setClientName] = useState("");
+  const [pages, setPages]           = useState<PageConfig[]>(initialPages);
   const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>(() =>
     generateSelectedSlides(initialPages)
   );
-  const [pageContents, setPageContents] = useState<Record<string, PageContent>>({});
-  const [activeId, setActiveId]         = useState<string | null>(null);
-  const [exporting, setExporting]       = useState(false);
+  const [pageContents, setPageContents] = useState<Record<string, SlideContent>>({});
+
+  // Which form sections are expanded
+  const [openSections, setOpenSections] = useState<Set<string>>(() => {
+    const first = initialPages.find((p) => p.checked)?.sectionKey;
+    return first ? new Set([first]) : new Set();
+  });
+
+  const [activeId, setActiveId]       = useState<string | null>(null);
+  const [exporting, setExporting]     = useState(false);
   const [restoreMessage, setRestoreMessage] = useState("");
-  const [saveMessage, setSaveMessage]   = useState("");
-  const [saveStatus, setSaveStatus]     = useState<"success" | "error" | "">("");
-  const [savedAt, setSavedAt]           = useState<string>("");
-  const didRestoreRef  = useRef(false);
-  const saveTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveStatus, setSaveStatus]   = useState<"success" | "error" | "">("");
+  const [savedAt, setSavedAt]         = useState<string>("");
+  const didRestoreRef = useRef(false);
+  const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Restore ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -537,9 +450,8 @@ export default function Home() {
     const draft = loadDraft();
     if (!draft) return;
 
-    const restoredPages  = mergePages(initialPages, draft.pages);
-    const rawSlides      = generateSelectedSlides(restoredPages);
-    const orderedSlides  = applySlideOrder(rawSlides, draft.slideOrder);
+    const restoredPages = mergePages(initialPages, draft.pages);
+    const orderedSlides = applySlideOrder(generateSelectedSlides(restoredPages), draft.slideOrder);
 
     setTitle(draft.title ?? "企画書タイトル");
     setDate(draft.date   ?? "2026/06/30");
@@ -551,11 +463,34 @@ export default function Home() {
     );
     setSavedAt(draft.savedAt ?? "");
 
+    const firstKey = orderedSlides[0]?.sectionKey;
+    if (firstKey) setOpenSections(new Set([firstKey]));
+
     setRestoreMessage("前回の内容を復元しました");
     setTimeout(() => setRestoreMessage(""), 3000);
   }, []);
 
-  // ── Content change ───────────────────────────────────────────────────────────
+  // ── Tap-to-scroll ─────────────────────────────────────────────────────────
+  const handleSelectSlide = useCallback((sectionKey: string) => {
+    setOpenSections((prev) => new Set(Array.from(prev).concat(sectionKey)));
+    requestAnimationFrame(() => {
+      document.getElementById(`form-section-${sectionKey}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
+  const handleSectionOpenChange = useCallback((sectionKey: string, open: boolean) => {
+    setOpenSections((prev) => {
+      const next = new Set(Array.from(prev));
+      if (open) next.add(sectionKey);
+      else next.delete(sectionKey);
+      return next;
+    });
+  }, []);
+
+  // ── Content change ────────────────────────────────────────────────────────
   const handleContentChange = (sectionKey: string, fieldKey: string, value: string) => {
     setPageContents((prev) => ({
       ...prev,
@@ -563,34 +498,23 @@ export default function Home() {
     }));
   };
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = () => {
     const now = new Date().toISOString();
-    const draft: DraftData = {
-      title,
-      date,
-      clientName,
-      pages: pages.map(({ sectionKey, checked, pageCount, type }) => ({
-        sectionKey, checked, pageCount, type,
-      })),
+    const ok = saveDraft({
+      title, date, clientName,
+      pages: pages.map(({ sectionKey, checked, pageCount, type }) => ({ sectionKey, checked, pageCount, type })),
       slideOrder: selectedSlides.map((s) => s.id),
       pageContents,
       savedAt: now,
-    };
-    const ok = saveDraft(draft);
+    });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (ok) {
-      setSavedAt(now);
-      setSaveMessage("保存しました");
-      setSaveStatus("success");
-    } else {
-      setSaveMessage("保存できませんでした");
-      setSaveStatus("error");
-    }
+    if (ok) { setSavedAt(now); setSaveMessage("保存しました"); setSaveStatus("success"); }
+    else    { setSaveMessage("保存できませんでした"); setSaveStatus("error"); }
     saveTimerRef.current = setTimeout(() => { setSaveMessage(""); setSaveStatus(""); }, 3000);
   };
 
-  // ── New document ──────────────────────────────────────────────────────────────
+  // ── New document ──────────────────────────────────────────────────────────
   const handleNew = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     setTitle("企画書タイトル");
@@ -600,13 +524,15 @@ export default function Home() {
     setSelectedSlides(generateSelectedSlides(initialPages));
     setPageContents({});
     setSavedAt("");
+    const first = initialPages.find((p) => p.checked)?.sectionKey;
+    setOpenSections(first ? new Set([first]) : new Set());
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveMessage("新しい企画書を作成しました");
     setSaveStatus("success");
     saveTimerRef.current = setTimeout(() => { setSaveMessage(""); setSaveStatus(""); }, 3000);
   };
 
-  // ── Page config ───────────────────────────────────────────────────────────────
+  // ── Page config ───────────────────────────────────────────────────────────
   const updateSelectedSlidesForSection = useCallback(
     (sectionKey: string, checked: boolean, pageCount: number, type: PageType) => {
       setSelectedSlides((prevSlides) => {
@@ -641,9 +567,7 @@ export default function Home() {
     if (!page) return;
     if (field === "type" && page.checked) {
       setSelectedSlides((prev) =>
-        prev.map((s) =>
-          s.sectionKey === sectionKey ? { ...s, type: value as PageType } : s
-        )
+        prev.map((s) => s.sectionKey === sectionKey ? { ...s, type: value as PageType } : s)
       );
     }
     if (field === "checked" || field === "pageCount") {
@@ -656,13 +580,12 @@ export default function Home() {
     }
   };
 
-  // ── DnD ──────────────────────────────────────────────────────────────────────
+  // ── DnD ──────────────────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor,  { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor,    { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
-
   const handleDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
   const handleDragEnd   = (e: DragEndEvent) => {
     const { active, over } = e;
@@ -677,11 +600,10 @@ export default function Home() {
       );
     }
   };
-
   const activeSlide = activeId ? selectedSlides.find((s) => s.id === activeId) : null;
   const activeIndex = activeSlide ? selectedSlides.findIndex((s) => s.id === activeId) : 0;
 
-  // ── Export ────────────────────────────────────────────────────────────────────
+  // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     if (selectedSlides.length === 0) {
       setSaveMessage("スライドが選択されていません");
@@ -704,30 +626,25 @@ export default function Home() {
     }
   };
 
-  // ── Derived ───────────────────────────────────────────────────────────────────
-  const slidesBySection = selectedSlides.reduce(
-    (acc, slide) => {
-      if (!acc[slide.sectionKey]) acc[slide.sectionKey] = [];
-      acc[slide.sectionKey].push(slide);
-      return acc;
-    },
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const slidesBySection   = selectedSlides.reduce(
+    (acc, s) => { (acc[s.sectionKey] ??= []).push(s); return acc; },
     {} as Record<string, SelectedSlide[]>
   );
   const orderedSectionKeys = Array.from(new Set(selectedSlides.map((s) => s.sectionKey)));
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 shadow-sm sticky top-0 z-10">
+        <div className="flex items-center justify-between max-w-[1400px] mx-auto">
           <div className="flex items-center gap-4">
             <h1 className="text-xl lg:text-2xl font-bold text-red-600 tracking-wide">KSS TOOL</h1>
             <span className="hidden sm:inline-block text-gray-400 text-sm">営業企画書生成ツール</span>
           </div>
           {restoreMessage && (
-            <div className="text-sm px-4 py-2 bg-gray-800 text-white rounded-lg">
-              {restoreMessage}
-            </div>
+            <div className="text-sm px-4 py-2 bg-gray-800 text-white rounded-lg">{restoreMessage}</div>
           )}
         </div>
       </header>
@@ -739,30 +656,18 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="title" className="text-sm font-medium text-gray-700">企画書タイトル</Label>
-                <Input
-                  id="title" value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="h-11 text-base" placeholder="タイトルを入力"
-                />
+                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="h-11 text-base" placeholder="タイトルを入力" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="date" className="text-sm font-medium text-gray-700">日付</Label>
                 <div className="relative">
-                  <Input
-                    id="date" value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="h-11 text-base pl-10" placeholder="YYYY/MM/DD"
-                  />
+                  <Input id="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 text-base pl-10" placeholder="YYYY/MM/DD" />
                   <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="client" className="text-sm font-medium text-gray-700">提案先名</Label>
-                <Input
-                  id="client" value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  className="h-11 text-base" placeholder="株式会社〇〇"
-                />
+                <Input id="client" value={clientName} onChange={(e) => setClientName(e.target.value)} className="h-11 text-base" placeholder="株式会社〇〇" />
               </div>
             </div>
           </CardContent>
@@ -770,7 +675,7 @@ export default function Home() {
 
         {/* ── Page structure + Overall preview ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-          {/* Page structure */}
+          {/* Left: page structure selector */}
           <Card className="lg:col-span-1 bg-white border-gray-200">
             <CardHeader className="pb-2 px-4 pt-4">
               <CardTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -783,10 +688,7 @@ export default function Home() {
                 {pages.map((page) => {
                   const labels = layoutLabels[page.sectionKey];
                   return (
-                    <div
-                      key={page.sectionKey}
-                      className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
-                    >
+                    <div key={page.sectionKey} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
                       <div className="flex items-center gap-3">
                         <Checkbox
                           id={page.sectionKey}
@@ -831,13 +733,16 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          {/* Overall preview */}
+          {/* Right: overall preview (slide deck) */}
           <Card className="lg:col-span-2 bg-white border-gray-200">
             <CardHeader className="pb-2 px-4 pt-4">
-              <CardTitle className="text-lg font-semibold text-gray-800">全体プレビュー</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold text-gray-800">全体プレビュー</CardTitle>
+                <span className="text-xs text-gray-400">サムネイルをタップ → 入力フォームへ</span>
+              </div>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="max-h-[420px] overflow-y-auto pr-1">
+              <div className="max-h-[560px] overflow-y-auto pr-1">
                 {selectedSlides.length === 0 ? (
                   <div className="text-center text-gray-400 py-12">ページが選択されていません</div>
                 ) : (
@@ -848,13 +753,14 @@ export default function Home() {
                     onDragEnd={handleDragEnd}
                   >
                     <SortableContext items={selectedSlides.map((s) => s.id)} strategy={rectSortingStrategy}>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {selectedSlides.map((slide, index) => (
                           <SortableThumbnail
                             key={slide.id}
                             slide={slide}
                             index={index}
-                            heading={pageContents[slide.sectionKey]?.heading ?? ""}
+                            content={pageContents[slide.sectionKey] ?? EMPTY_CONTENT}
+                            onSelect={() => handleSelectSlide(slide.sectionKey)}
                           />
                         ))}
                       </div>
@@ -864,7 +770,7 @@ export default function Home() {
                         <DragOverlayThumbnail
                           slide={activeSlide}
                           index={activeIndex}
-                          heading={pageContents[activeSlide.sectionKey]?.heading ?? ""}
+                          content={pageContents[activeSlide.sectionKey] ?? EMPTY_CONTENT}
                         />
                       )}
                     </DragOverlay>
@@ -878,10 +784,7 @@ export default function Home() {
         {/* ── Actions ── */}
         <div className="mb-4 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={handleSave}
-              className="h-11 px-6 bg-gray-700 hover:bg-gray-800 text-white flex items-center gap-2"
-            >
+            <Button onClick={handleSave} className="h-11 px-6 bg-gray-700 hover:bg-gray-800 text-white flex items-center gap-2">
               <Save className="w-4 h-4" />保存
             </Button>
             <AlertDialog>
@@ -904,8 +807,7 @@ export default function Home() {
               </AlertDialogContent>
             </AlertDialog>
             <Button
-              onClick={handleExport}
-              disabled={exporting}
+              onClick={handleExport} disabled={exporting}
               className="h-11 px-6 bg-red-600 hover:bg-red-700 text-white disabled:opacity-70 flex items-center gap-2"
             >
               {exporting ? (
@@ -932,8 +834,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* ── Page content input ── */}
-        <Card className="mb-4 bg-white border-gray-200">
+        {/* ── Page content input forms ── */}
+        <Card className="bg-white border-gray-200">
           <CardHeader className="pb-2 px-4 pt-4">
             <CardTitle className="text-lg font-semibold text-gray-800">ページ内容入力</CardTitle>
           </CardHeader>
@@ -942,7 +844,7 @@ export default function Home() {
               <div className="text-center text-gray-400 py-8">ページが選択されていません</div>
             ) : (
               <div className="space-y-3">
-                {orderedSectionKeys.map((sectionKey, idx) => {
+                {orderedSectionKeys.map((sectionKey) => {
                   const sectionSlides = slidesBySection[sectionKey];
                   const firstSlide    = sectionSlides[0];
                   return (
@@ -954,36 +856,8 @@ export default function Home() {
                       slideCount={sectionSlides.length}
                       content={pageContents[sectionKey] ?? EMPTY_CONTENT}
                       onContentChange={handleContentChange}
-                      defaultOpen={idx === 0}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Page detail preview ── */}
-        <Card className="bg-white border-gray-200">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-lg font-semibold text-gray-800">ページ別プレビュー</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {selectedSlides.length === 0 ? (
-              <div className="text-center text-gray-400 py-8">ページが選択されていません</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {orderedSectionKeys.map((sectionKey) => {
-                  const sectionSlides = slidesBySection[sectionKey];
-                  const firstSlide    = sectionSlides[0];
-                  return (
-                    <SlidePreviewCard
-                      key={sectionKey}
-                      sectionKey={sectionKey}
-                      sectionName={firstSlide.sectionName}
-                      layoutName={getLayoutName(sectionKey, firstSlide.type)}
-                      slideCount={sectionSlides.length}
-                      content={pageContents[sectionKey] ?? EMPTY_CONTENT}
+                      open={openSections.has(sectionKey)}
+                      onOpenChange={(v) => handleSectionOpenChange(sectionKey, v)}
                     />
                   );
                 })}
