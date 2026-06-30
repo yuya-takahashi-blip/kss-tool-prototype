@@ -67,45 +67,48 @@ function txt(
 }
 
 /**
- * Arrow: rect shaft + two rotated rects forming a ">" arrowhead.
+ * Arrow: rect shaft + stacked horizontal rects approximating a right-pointing triangle.
+ *
+ * Root cause: pptxgenjs v4 bleeds ANY shape that uses the `rotate` transform to subsequent
+ * slides in the generated PPTX. Eliminating `rotate` entirely is the only safe fix.
+ *
+ * The arrowhead is built from N thin horizontal rects whose widths follow a linear ramp
+ * (widest at vertical centre, zero at top/bottom edges). PowerPoint renders these as
+ * a smooth solid triangle because it uses vector — not pixel — rendering.
+ *
  * Guard: only renders when sectionKey === "business_scheme".
- * This prevents leaked rotated-rect shapes from appearing on other slides.
  */
 function drawArrow(sl: Slide, x: number, y: number, w: number, h: number, sectionKey: string) {
-  if (sectionKey !== "business_scheme") return;   // ← page guard
+  if (sectionKey !== "business_scheme") return;
 
   const mid    = y + h / 2;
   const shaftH = Math.max(h * 0.28, 0.06);
-  const shaftW = w * 0.58;
-  const hx     = x + shaftW;
-  const hw     = w - shaftW;
+  const shaftW = w * 0.55;
+  const hw     = w - shaftW;          // horizontal span of arrowhead
+  const tipX   = x + w;               // rightmost point (the tip)
 
-  // Shaft
+  // Shaft — single non-rotating rect
   sl.addShape("rect", {
     x, y: mid - shaftH / 2, w: shaftW, h: shaftH,
     fill: { color: RED }, line: { color: RED, width: 0 },
   });
 
-  // Arrowhead — two rotated rects forming ">"
-  const armLen   = Math.sqrt(hw * hw + (h / 2) * (h / 2));
-  const armThk   = Math.max(h * 0.25, 0.055);
-  const angleDeg = Math.atan2(h / 2, hw) * (180 / Math.PI);
+  // Arrowhead — N stacked horizontal rects, no rotation.
+  // Band i spans [y + i*bh, y + (i+1)*bh].
+  // Width follows a triangular envelope: widest at centre, zero at top/bottom.
+  const N    = 13;
+  const bh   = h / N;
+  const half = N / 2;
 
-  sl.addShape("rect", {
-    x: hx + hw / 2 - armLen / 2,
-    y: y + h / 4 - armThk / 2,
-    w: armLen, h: armThk,
-    rotate: angleDeg,
-    fill: { color: RED }, line: { color: RED, width: 0 },
-  });
-
-  sl.addShape("rect", {
-    x: hx + hw / 2 - armLen / 2,
-    y: y + h * 3 / 4 - armThk / 2,
-    w: armLen, h: armThk,
-    rotate: -angleDeg,
-    fill: { color: RED }, line: { color: RED, width: 0 },
-  });
+  for (let i = 0; i < N; i++) {
+    const distFromCentre = Math.abs(i + 0.5 - half);
+    const bw = hw * Math.max(0, 1 - distFromCentre / half);
+    if (bw < 0.004) continue;
+    sl.addShape("rect", {
+      x: tipX - bw, y: y + i * bh, w: bw, h: bh,
+      fill: { color: RED }, line: { color: RED, width: 0 },
+    });
+  }
 }
 
 /**
