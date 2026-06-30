@@ -225,9 +225,12 @@ export default function Home() {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [message, setMessage] = useState("");
-  const [savedAt, setSavedAt] = useState<string>(""); // ISO string of last save
+  const [restoreMessage, setRestoreMessage] = useState(""); // 復元通知（ヘッダー）
+  const [saveMessage, setSaveMessage] = useState("");       // 保存通知（ボタン付近）
+  const [saveStatus, setSaveStatus] = useState<"success" | "error" | "">("");
+  const [savedAt, setSavedAt] = useState<string>("");
   const didRestoreRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Restore from localStorage on mount (runs client-side only) ──────────────
   useEffect(() => {
@@ -248,12 +251,12 @@ export default function Home() {
     setSelectedSlides(orderedSlides);
     setSavedAt(draft.savedAt ?? "");
 
-    setMessage("前回の内容を復元しました");
-    setTimeout(() => setMessage(""), 3000);
+    setRestoreMessage("前回の内容を復元しました");
+    setTimeout(() => setRestoreMessage(""), 3000);
   }, []);
 
   // ── Save handler ─────────────────────────────────────────────────────────────
-  const handleSave = useCallback(() => {
+  const handleSave = () => {
     const now = new Date().toISOString();
     const draft: DraftData = {
       title,
@@ -266,14 +269,20 @@ export default function Home() {
       savedAt: now,
     };
     const ok = saveDraft(draft);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (ok) {
       setSavedAt(now);
-      setMessage("保存しました");
+      setSaveMessage("保存しました");
+      setSaveStatus("success");
     } else {
-      setMessage("保存できませんでした");
+      setSaveMessage("保存できませんでした");
+      setSaveStatus("error");
     }
-    setTimeout(() => setMessage(""), 2500);
-  }, [title, date, clientName, pages, selectedSlides]);
+    saveTimerRef.current = setTimeout(() => {
+      setSaveMessage("");
+      setSaveStatus("");
+    }, 3000);
+  };
 
   // ── Page config change ────────────────────────────────────────────────────────
   const updateSelectedSlidesForSection = useCallback(
@@ -352,20 +361,23 @@ export default function Home() {
   // ── Export ────────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     if (selectedSlides.length === 0) {
-      setMessage("スライドが選択されていません");
-      setTimeout(() => setMessage(""), 2500);
+      setSaveMessage("スライドが選択されていません");
+      setSaveStatus("error");
+      setTimeout(() => { setSaveMessage(""); setSaveStatus(""); }, 2500);
       return;
     }
     setExporting(true);
     try {
       await generatePptx({ title, clientName, date, selectedSlides });
-      setMessage("ダウンロードしました");
+      setSaveMessage("ダウンロードしました");
+      setSaveStatus("success");
     } catch (err) {
       console.error(err);
-      setMessage("書き出しに失敗しました");
+      setSaveMessage("書き出しに失敗しました");
+      setSaveStatus("error");
     } finally {
       setExporting(false);
-      setTimeout(() => setMessage(""), 3000);
+      setTimeout(() => { setSaveMessage(""); setSaveStatus(""); }, 3000);
     }
   };
 
@@ -393,9 +405,9 @@ export default function Home() {
             <h1 className="text-xl lg:text-2xl font-bold text-red-600 tracking-wide">KSS TOOL</h1>
             <span className="hidden sm:inline-block text-gray-400 text-sm">営業企画書生成ツール</span>
           </div>
-          {message && (
-            <div className="text-sm px-4 py-2 bg-gray-800 text-white rounded-lg transition-opacity">
-              {message}
+          {restoreMessage && (
+            <div className="text-sm px-4 py-2 bg-gray-800 text-white rounded-lg">
+              {restoreMessage}
             </div>
           )}
         </div>
@@ -572,35 +584,49 @@ export default function Home() {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <Button
-            onClick={handleSave}
-            className="h-11 px-6 bg-gray-700 hover:bg-gray-800 text-white flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            保存
-          </Button>
-          <Button
-            onClick={handleExport}
-            disabled={exporting}
-            className="h-11 px-6 bg-red-600 hover:bg-red-700 text-white disabled:opacity-70 flex items-center gap-2"
-          >
-            {exporting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                生成中...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                PowerPointを書き出す
-              </>
-            )}
-          </Button>
-          {/* Last saved timestamp */}
-          <span className="text-xs text-gray-400 ml-1">
-            {savedAt ? `最終保存：${formatDateTime(savedAt)}` : "最終保存：未保存"}
-          </span>
+        <div className="mb-4 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={handleSave}
+              className="h-11 px-6 bg-gray-700 hover:bg-gray-800 text-white flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              保存
+            </Button>
+            <Button
+              onClick={handleExport}
+              disabled={exporting}
+              className="h-11 px-6 bg-red-600 hover:bg-red-700 text-white disabled:opacity-70 flex items-center gap-2"
+            >
+              {exporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  PowerPointを書き出す
+                </>
+              )}
+            </Button>
+            <span className="text-xs text-gray-400 ml-1">
+              {savedAt ? `最終保存：${formatDateTime(savedAt)}` : "最終保存：未保存"}
+            </span>
+          </div>
+          {/* Save / action message banner */}
+          {saveMessage && (
+            <div
+              className={[
+                "inline-flex items-center px-4 py-2.5 rounded-lg text-sm font-medium",
+                saveStatus === "success"
+                  ? "bg-green-50 text-green-800 border border-green-200"
+                  : "bg-red-50 text-red-800 border border-red-200",
+              ].join(" ")}
+            >
+              {saveMessage}
+            </div>
+          )}
         </div>
 
         {/* Page-Specific Preview Cards */}
