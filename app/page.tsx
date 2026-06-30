@@ -13,7 +13,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarIcon, FileText, Download, Loader2, GripVertical, Save } from "lucide-react";
+import { CalendarIcon, FileText, Download, Loader2, GripVertical, Save, FilePlus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   DndContext,
   closestCenter,
@@ -113,6 +124,14 @@ function formatDateTime(iso: string): string {
   } catch {
     return "";
   }
+}
+
+function todayString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${y}/${mo}/${dy}`;
 }
 
 // ─── Rebuild slides from pages, then apply a saved order ─────────────────────
@@ -278,6 +297,24 @@ export default function Home() {
       setSaveMessage("保存できませんでした");
       setSaveStatus("error");
     }
+    saveTimerRef.current = setTimeout(() => {
+      setSaveMessage("");
+      setSaveStatus("");
+    }, 3000);
+  };
+
+  // ── New document handler ──────────────────────────────────────────────────────
+  const handleNew = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    setTitle("企画書タイトル");
+    setDate(todayString());
+    setClientName("");
+    setPages(initialPages);
+    setSelectedSlides(generateSelectedSlides(initialPages));
+    setSavedAt("");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveMessage("新しい企画書を作成しました");
+    setSaveStatus("success");
     saveTimerRef.current = setTimeout(() => {
       setSaveMessage("");
       setSaveStatus("");
@@ -593,6 +630,29 @@ export default function Home() {
               <Save className="w-4 h-4" />
               保存
             </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-11 px-6 border-gray-300 text-gray-700 flex items-center gap-2"
+                >
+                  <FilePlus className="w-4 h-4" />
+                  新規作成
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>新規作成</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    現在の入力内容をリセットして、新しい企画書を作成します。よろしいですか？
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleNew}>OK</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button
               onClick={handleExport}
               disabled={exporting}
