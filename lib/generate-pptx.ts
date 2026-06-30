@@ -135,38 +135,56 @@ function addShell(
     fill: { color: "E0E0E0" }, line: { color: "E0E0E0" },
   });
 
-  // Footer center: logo image or KANSAI SUPER STUDIO + date
-  const footerLogoW = CW - 2.2; // leave room for page number
-  const footerLogoX = CX;
+  // Footer center: logo+date group centered across the full slide width
+  const FY      = FOOTER_Y + 0.08;
+  const FH      = 0.16;
+  const GAP     = 0.12;
+  const DATE_W  = date ? 0.7 : 0;
+  const FONT_SZ = 6.5;
+
   if (companyLogo) {
+    const logoH  = FH;
+    const logoW  = 0.9;
+    const totalW = logoW + (date ? GAP + DATE_W : 0);
+    const startX = (SW - totalW) / 2;
     try {
-      const logoH = FOOTER_H - 0.14;
-      const logoW = logoH * 3.5; // assume roughly 3.5:1 aspect
-      const logoX = SW / 2 - logoW / 2;
       slide.addImage({
         data: companyLogo,
-        x: logoX,
-        y: FOOTER_Y + 0.08,
+        x: startX,
+        y: FY,
         w: logoW,
         h: logoH,
       });
-      if (date) {
-        txt(slide, date, logoX + logoW + 0.15, FOOTER_Y + 0.06, 1.8, FOOTER_H - 0.08, {
-          fontSize: 7, color: "BBBBBB", valign: "middle",
-        });
-      }
-    } catch {
-      // Fallback to text
-      const footerText = date ? `KANSAI SUPER STUDIO　${date}` : "KANSAI SUPER STUDIO";
-      txt(slide, footerText, footerLogoX, FOOTER_Y + 0.06, footerLogoW, FOOTER_H - 0.08, {
-        fontSize: 7.5, color: "BBBBBB", valign: "middle", align: "center",
+    } catch { /* fallback: render text instead */
+      slide.addText("KANSAI SUPER STUDIO", {
+        x: startX, y: FY, w: logoW, h: FH,
+        fontFace: FONT, fontSize: FONT_SZ, bold: true, color: "B8B8B8",
+        align: "right", valign: "middle", margin: 0,
+      });
+    }
+    if (date) {
+      slide.addText(date, {
+        x: startX + logoW + GAP, y: FY, w: DATE_W, h: FH,
+        fontFace: FONT, fontSize: FONT_SZ, color: "B8B8B8",
+        align: "left", valign: "middle", margin: 0,
       });
     }
   } else {
-    const footerText = date ? `KANSAI SUPER STUDIO　${date}` : "KANSAI SUPER STUDIO";
-    txt(slide, footerText, footerLogoX, FOOTER_Y + 0.06, footerLogoW, FOOTER_H - 0.08, {
-      fontSize: 7.5, color: "BBBBBB", valign: "middle", align: "center",
+    const LOGO_W = 1.3;
+    const totalW = LOGO_W + (date ? GAP + DATE_W : 0);
+    const startX = (SW - totalW) / 2;
+    slide.addText("KANSAI SUPER STUDIO", {
+      x: startX, y: FY, w: LOGO_W, h: FH,
+      fontFace: FONT, fontSize: FONT_SZ, bold: true, color: "B8B8B8",
+      align: "right", valign: "middle", margin: 0,
     });
+    if (date) {
+      slide.addText(date, {
+        x: startX + LOGO_W + GAP, y: FY, w: DATE_W, h: FH,
+        fontFace: FONT, fontSize: FONT_SZ, color: "B8B8B8",
+        align: "left", valign: "middle", margin: 0,
+      });
+    }
   }
 
   // Page number (right-aligned, fits within SW)
