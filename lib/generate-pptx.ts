@@ -12,6 +12,7 @@ export interface GeneratePptxOptions {
   title: string;
   clientName: string;
   date: string;
+  companyLogo: string; // base64 data URL or "" for text fallback
   selectedSlides: SelectedSlide[];
 }
 
@@ -118,170 +119,138 @@ function addShell(
   sectionName: string,
   layoutName: string,
   pageNum: number,
-  totalPages: number
+  totalPages: number,
+  date: string
 ) {
   // Header band
   slide.addShape("rect", {
-    x: 0,
-    y: 0,
-    w: SW,
-    h: HEADER_H,
-    fill: { color: LIGHT_BG },
-    line: { color: LIGHT_BG },
+    x: 0, y: 0, w: SW, h: HEADER_H,
+    fill: { color: LIGHT_BG }, line: { color: LIGHT_BG },
   });
   // Red left accent bar
   slide.addShape("rect", {
-    x: 0,
-    y: 0,
-    w: 0.07,
-    h: HEADER_H,
-    fill: { color: RED },
-    line: { color: RED },
+    x: 0, y: 0, w: 0.07, h: HEADER_H,
+    fill: { color: RED }, line: { color: RED },
   });
   // Section name
   txt(slide, sectionName, 0.2, 0, 6.5, HEADER_H, {
-    fontSize: 15,
-    bold: true,
-    color: DARK,
-    valign: "middle",
+    fontSize: 15, bold: true, color: DARK, valign: "middle",
   });
   // Layout badge background
   slide.addShape("rect", {
-    x: SW - M - 2.3,
-    y: 0.15,
-    w: 2.3,
-    h: 0.35,
-    fill: { color: RED_SOFT },
-    line: { color: "FECACA", width: 0.5 },
+    x: SW - M - 2.3, y: 0.15, w: 2.3, h: 0.35,
+    fill: { color: RED_SOFT }, line: { color: "FECACA", width: 0.5 },
   });
   // Layout badge text
   txt(slide, layoutName, SW - M - 2.3, 0.15, 2.3, 0.35, {
-    fontSize: 8.5,
-    color: RED,
-    align: "center",
-    valign: "middle",
+    fontSize: 8.5, color: RED, align: "center", valign: "middle",
   });
 
   // Footer separator
   slide.addShape("rect", {
-    x: M,
-    y: FOOTER_Y,
-    w: CW,
-    h: 0.01,
-    fill: { color: "E0E0E0" },
-    line: { color: "E0E0E0" },
+    x: M, y: FOOTER_Y, w: CW, h: 0.01,
+    fill: { color: "E0E0E0" }, line: { color: "E0E0E0" },
   });
-  // Footer left
-  txt(slide, "KSS TOOL", M, FOOTER_Y + 0.05, 3, FOOTER_H - 0.05, {
-    fontSize: 7.5,
-    color: "BBBBBB",
-    valign: "middle",
+  // Footer left: KANSAI SUPER STUDIO + date
+  const footerText = date ? `KANSAI SUPER STUDIO　${date}` : "KANSAI SUPER STUDIO";
+  txt(slide, footerText, M, FOOTER_Y + 0.05, SW - M * 2 - 1.6, FOOTER_H - 0.05, {
+    fontSize: 7, color: "BBBBBB", valign: "middle", align: "center",
   });
   // Footer page number
   txt(slide, `${pageNum} / ${totalPages}`, SW - M - 1.5, FOOTER_Y + 0.05, 1.5, FOOTER_H - 0.05, {
-    fontSize: 7.5,
-    color: "BBBBBB",
-    align: "right",
-    valign: "middle",
+    fontSize: 7.5, color: "BBBBBB", align: "right", valign: "middle",
   });
 
-  void pptx; // suppress unused warning
+  void pptx;
 }
 
 // ─── Cover slide ──────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function addCoverSlide(pptx: any, title: string, clientName: string, date: string) {
+function addCoverSlide(pptx: any, title: string, clientName: string, date: string, companyLogo: string) {
   const slide = pptx.addSlide();
 
-  // Left red panel
+  // Full white background (default)
+
+  // Top red accent strip
   slide.addShape("rect", {
-    x: 0,
-    y: 0,
-    w: 3.8,
-    h: SH,
-    fill: { color: RED },
-    line: { color: RED },
+    x: 0, y: 0, w: SW, h: 0.12,
+    fill: { color: RED }, line: { color: RED },
   });
-
-  // KSS TOOL label (top of red panel)
-  txt(slide, "KSS TOOL", 0.25, 0.3, 3.3, 0.5, {
-    fontSize: 11,
-    bold: true,
-    color: WHITE,
-    valign: "middle",
-  });
-
-  // Thin white separator in red panel
+  // Bottom red accent strip
   slide.addShape("rect", {
-    x: 0.25,
-    y: 0.95,
-    w: 3.1,
-    h: 0.015,
-    fill: { color: "FFFFFF" },
-    line: { color: "FFFFFF" },
+    x: 0, y: SH - 0.12, w: SW, h: 0.12,
+    fill: { color: RED }, line: { color: RED },
   });
 
-  // "営業企画書" sub label
-  txt(slide, "営業企画書", 0.25, 1.1, 3.3, 0.45, {
-    fontSize: 10,
-    color: "FFCCCC",
-    valign: "middle",
+  // Center layout: logo area + title + client + date
+  const centerX = SW / 2;
+  const logoY = 0.6;
+
+  // Company logo / text
+  if (companyLogo) {
+    slide.addImage({
+      data: companyLogo,
+      x: centerX - 1.8,
+      y: logoY,
+      w: 3.6,
+      h: 0.8,
+    });
+  } else {
+    // Text logo: KANSAI SUPER STUDIO
+    txt(slide, "KANSAI SUPER STUDIO", centerX - 3.5, logoY, 7, 0.7, {
+      fontSize: 20,
+      bold: true,
+      color: RED,
+      align: "center",
+      valign: "middle",
+      charSpacing: 3,
+    });
+  }
+
+  // Thin red separator
+  slide.addShape("rect", {
+    x: centerX - 1.5, y: logoY + 0.85, w: 3, h: 0.025,
+    fill: { color: RED }, line: { color: RED },
   });
 
-  // Main title (in red panel)
-  txt(slide, title || "企画書タイトル", 0.25, 1.75, 3.3, 2.0, {
-    fontSize: 18,
+  // Title
+  txt(slide, title || "企画書タイトル", M, 1.75, CW, 1.3, {
+    fontSize: 28,
     bold: true,
-    color: WHITE,
-    valign: "top",
+    color: title ? DARK : "CCCCCC",
+    align: "center",
+    valign: "middle",
     wrap: true,
   });
 
-  // Right panel — white background (already white by default)
-
-  // "提案先" label
-  txt(slide, "提案先", 4.4, 1.5, 1.5, 0.4, {
-    fontSize: 9,
-    color: "AAAAAA",
-    valign: "middle",
+  // Separator line below title
+  slide.addShape("rect", {
+    x: centerX - 2.0, y: 3.2, w: 4.0, h: 0.015,
+    fill: { color: "E0E0E0" }, line: { color: "E0E0E0" },
   });
-  // Client name
-  txt(slide, clientName || "株式会社〇〇", 4.4, 1.9, 5.2, 0.7, {
+
+  // Client name label
+  txt(slide, "提案先", M, 3.35, CW, 0.35, {
+    fontSize: 9, color: "AAAAAA", align: "center", valign: "middle",
+  });
+  // Client name value
+  txt(slide, clientName || "株式会社〇〇", M, 3.7, CW, 0.65, {
     fontSize: 18,
     bold: true,
-    color: DARK,
-    valign: "top",
-  });
-
-  // Separator line
-  slide.addShape("rect", {
-    x: 4.4,
-    y: 2.7,
-    w: 5.2,
-    h: 0.01,
-    fill: { color: "E0E0E0" },
-    line: { color: "E0E0E0" },
-  });
-
-  // Date label
-  txt(slide, "日付", 4.4, 2.85, 1.5, 0.35, {
-    fontSize: 9,
-    color: "AAAAAA",
+    color: clientName ? DARK : "CCCCCC",
+    align: "center",
     valign: "middle",
   });
-  txt(slide, date || "—", 4.4, 3.2, 5.2, 0.45, {
-    fontSize: 13,
-    color: MID,
-    valign: "top",
-  });
 
-  // Bottom right branding
-  txt(slide, "Powered by KSS TOOL", 4.4, SH - 0.55, 5.2, 0.4, {
-    fontSize: 8,
-    color: "CCCCCC",
-    align: "right",
+  // Date
+  txt(slide, date || "—", M, 4.45, CW, 0.4, {
+    fontSize: 11,
+    color: date ? MID : "CCCCCC",
+    align: "center",
     valign: "middle",
   });
+
+  void pptx;
 }
 
 // ─── Layout renderers ─────────────────────────────────────────────────────────
@@ -584,7 +553,8 @@ function addContentSlide(
   pptx: any,
   selectedSlide: SelectedSlide,
   pageNum: number,
-  totalPages: number
+  totalPages: number,
+  date: string
 ) {
   const slide = pptx.addSlide();
   const layoutName = getLayoutName(selectedSlide.sectionKey, selectedSlide.type);
@@ -593,7 +563,7 @@ function addContentSlide(
       ? `${selectedSlide.sectionName}（${selectedSlide.slideIndexInSection}）`
       : selectedSlide.sectionName;
 
-  addShell(pptx, slide, sectionLabel, layoutName, pageNum, totalPages);
+  addShell(pptx, slide, sectionLabel, layoutName, pageNum, totalPages, date);
 
   switch (selectedSlide.sectionKey) {
     case "greeting": renderGreeting(slide, selectedSlide.type); break;
@@ -620,11 +590,11 @@ export async function generatePptx(options: GeneratePptxOptions): Promise<void> 
   const totalPages = options.selectedSlides.length + 1;
 
   // Cover
-  addCoverSlide(pptx, options.title, options.clientName, options.date);
+  addCoverSlide(pptx, options.title, options.clientName, options.date, options.companyLogo);
 
   // Content slides in selectedSlides order
   options.selectedSlides.forEach((s, i) => {
-    addContentSlide(pptx, s, i + 2, totalPages);
+    addContentSlide(pptx, s, i + 2, totalPages, options.date);
   });
 
   // File name: proposal-YYYYMMDD.pptx

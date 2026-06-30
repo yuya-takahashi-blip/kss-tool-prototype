@@ -86,6 +86,7 @@ interface DraftData {
   title: string;
   date: string;
   clientName: string;
+  companyLogo: string; // base64 data URL or "" for text fallback
   pages: Array<{ sectionKey: string; checked: boolean; pageCount: number; type: PageType }>;
   slideOrder: string[];
   pageContents: Record<string, SlideContent>;
@@ -163,7 +164,7 @@ const EMPTY_CONTENT: SlideContent = {};
 const STORAGE_KEY = "kss-tool-proposal-draft";
 
 const initialPages: PageConfig[] = [
-  { sectionKey: "greeting",        sectionName: "ご挨拶",           checked: true,  pageCount: 1, type: "A" },
+  { sectionKey: "greeting",        sectionName: "表紙",             checked: true,  pageCount: 1, type: "A" },
   { sectionKey: "brand",           sectionName: "ブランド紹介",      checked: true,  pageCount: 1, type: "A" },
   { sectionKey: "business_scheme", sectionName: "ビジネススキーム",  checked: true,  pageCount: 1, type: "A" },
   { sectionKey: "cases",           sectionName: "事例紹介",          checked: true,  pageCount: 1, type: "A" },
@@ -252,13 +253,17 @@ interface ThumbnailProps {
   slide: SelectedSlide;
   index: number;
   content: SlideContent;
+  date: string;
+  title: string;
+  clientName: string;
   onSelect: () => void;
 }
 
-function SortableThumbnail({ slide, index, content, onSelect }: ThumbnailProps) {
+function SortableThumbnail({ slide, index, content, date, title, clientName, onSelect }: ThumbnailProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
 
+  const isCover = slide.sectionKey === "greeting";
   const displayName =
     slide.slideIndexInSection > 1
       ? `${slide.sectionName} (${slide.slideIndexInSection})`
@@ -286,7 +291,7 @@ function SortableThumbnail({ slide, index, content, onSelect }: ThumbnailProps) 
 
       {/* Slide content — clickable */}
       <div
-        className="flex-1 overflow-hidden cursor-pointer"
+        className="flex-1 overflow-hidden cursor-pointer min-h-0"
         onClick={onSelect}
         role="button"
         aria-label={`${displayName}の入力フォームへ`}
@@ -295,18 +300,26 @@ function SortableThumbnail({ slide, index, content, onSelect }: ThumbnailProps) 
           sectionKey={slide.sectionKey}
           type={slide.type}
           content={content}
+          isCover={isCover}
+          title={title}
+          clientName={clientName}
+          date={date}
         />
       </div>
 
-      {/* Footer: layout name */}
-      <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0">
-        <span className="text-[8px] text-gray-400 truncate block">{getLayoutName(slide.sectionKey, slide.type)}</span>
-      </div>
+      {/* Footer: layout name (non-cover) or nothing (cover) */}
+      {!isCover && (
+        <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0 flex items-center justify-between gap-1">
+          <span className="text-[7px] text-gray-400 truncate flex-1">{getLayoutName(slide.sectionKey, slide.type)}</span>
+          <span className="text-[7px] text-gray-400 shrink-0">KANSAI SUPER STUDIO{date ? `　${date}` : ""}</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function DragOverlayThumbnail({ slide, index, content }: Omit<ThumbnailProps, "onSelect">) {
+function DragOverlayThumbnail({ slide, index, content, date, title, clientName }: Omit<ThumbnailProps, "onSelect">) {
+  const isCover = slide.sectionKey === "greeting";
   const displayName =
     slide.slideIndexInSection > 1
       ? `${slide.sectionName} (${slide.slideIndexInSection})`
@@ -319,12 +332,23 @@ function DragOverlayThumbnail({ slide, index, content }: Omit<ThumbnailProps, "o
         </span>
         <GripVertical className="w-3 h-3 text-red-200 shrink-0" />
       </div>
-      <div className="flex-1 overflow-hidden">
-        <SlideMiniPreview sectionKey={slide.sectionKey} type={slide.type} content={content} />
+      <div className="flex-1 overflow-hidden min-h-0">
+        <SlideMiniPreview
+          sectionKey={slide.sectionKey}
+          type={slide.type}
+          content={content}
+          isCover={isCover}
+          title={title}
+          clientName={clientName}
+          date={date}
+        />
       </div>
-      <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0">
-        <span className="text-[8px] text-gray-400 truncate block">{getLayoutName(slide.sectionKey, slide.type)}</span>
-      </div>
+      {!isCover && (
+        <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0 flex items-center justify-between gap-1">
+          <span className="text-[7px] text-gray-400 truncate flex-1">{getLayoutName(slide.sectionKey, slide.type)}</span>
+          <span className="text-[7px] text-gray-400 shrink-0">KANSAI SUPER STUDIO{date ? `　${date}` : ""}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -421,6 +445,7 @@ export default function Home() {
   const [title, setTitle]           = useState("企画書タイトル");
   const [date, setDate]             = useState("2026/06/30");
   const [clientName, setClientName] = useState("");
+  const [companyLogo, setCompanyLogo] = useState(""); // reserved for future logo upload
   const [pages, setPages]           = useState<PageConfig[]>(initialPages);
   const [selectedSlides, setSelectedSlides] = useState<SelectedSlide[]>(() =>
     generateSelectedSlides(initialPages)
@@ -456,6 +481,7 @@ export default function Home() {
     setTitle(draft.title ?? "企画書タイトル");
     setDate(draft.date   ?? "2026/06/30");
     setClientName(draft.clientName ?? "");
+    setCompanyLogo(typeof draft.companyLogo === "string" ? draft.companyLogo : "");
     setPages(restoredPages);
     setSelectedSlides(orderedSlides);
     setPageContents(
@@ -502,7 +528,7 @@ export default function Home() {
   const handleSave = () => {
     const now = new Date().toISOString();
     const ok = saveDraft({
-      title, date, clientName,
+      title, date, clientName, companyLogo,
       pages: pages.map(({ sectionKey, checked, pageCount, type }) => ({ sectionKey, checked, pageCount, type })),
       slideOrder: selectedSlides.map((s) => s.id),
       pageContents,
@@ -520,6 +546,7 @@ export default function Home() {
     setTitle("企画書タイトル");
     setDate(todayString());
     setClientName("");
+    setCompanyLogo("");
     setPages(initialPages);
     setSelectedSlides(generateSelectedSlides(initialPages));
     setPageContents({});
@@ -613,7 +640,7 @@ export default function Home() {
     }
     setExporting(true);
     try {
-      await generatePptx({ title, clientName, date, selectedSlides });
+      await generatePptx({ title, clientName, date, companyLogo, selectedSlides });
       setSaveMessage("ダウンロードしました");
       setSaveStatus("success");
     } catch (err) {
@@ -760,6 +787,9 @@ export default function Home() {
                             slide={slide}
                             index={index}
                             content={pageContents[slide.sectionKey] ?? EMPTY_CONTENT}
+                            date={date}
+                            title={title}
+                            clientName={clientName}
                             onSelect={() => handleSelectSlide(slide.sectionKey)}
                           />
                         ))}
@@ -771,6 +801,9 @@ export default function Home() {
                           slide={activeSlide}
                           index={activeIndex}
                           content={pageContents[activeSlide.sectionKey] ?? EMPTY_CONTENT}
+                          date={date}
+                          title={title}
+                          clientName={clientName}
                         />
                       )}
                     </DragOverlay>

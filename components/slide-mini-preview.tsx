@@ -8,6 +8,11 @@ interface Props {
   sectionKey: string;
   type: PageType;
   content: SlideContent;
+  // Cover slide extra props
+  isCover?: boolean;
+  title?: string;
+  clientName?: string;
+  date?: string;
 }
 
 // ── Shared micro-components ──────────────────────────────────────────────────
@@ -70,65 +75,44 @@ function Arrow({ dir = "right" }: { dir?: "right" | "both" | "down" }) {
 
 // ── Section layouts ───────────────────────────────────────────────────────────
 
-export function SlideMiniPreview({ sectionKey, type, content }: Props) {
+export function SlideMiniPreview({ sectionKey, type, content, isCover, title, clientName, date }: Props) {
   const h = content.heading ?? "";
   const body = content.body ?? "";
 
-  switch (sectionKey) {
-    // ── ご挨拶 ──────────────────────────────────────────────────────────────
-    case "greeting": {
-      if (type === "A") {
-        return (
-          <div className="w-full h-full flex flex-col p-1.5 gap-1 justify-between">
-            <Val v={h} fallback="見出し" cls="text-[9px] font-semibold text-gray-800 line-clamp-1" />
-            <div className="flex-1 mt-0.5">
-              {body ? (
-                <p className="text-[7px] text-gray-600 leading-snug line-clamp-3">{body}</p>
-              ) : (
-                <PlaceholderLines n={3} />
-              )}
-            </div>
-            <div className="flex justify-end gap-2">
-              {content.addressee && (
-                <span className="text-[7px] text-gray-400 truncate">{content.addressee}</span>
-              )}
-              <Val v={content.responsible} fallback="" cls="text-[7px] text-gray-500" />
-            </div>
-          </div>
-        );
-      }
-      if (type === "B") {
-        return (
-          <div className="w-full h-full flex p-1.5 gap-1.5">
-            <div className="flex-1 flex flex-col justify-between min-w-0 gap-0.5">
-              <Val v={h} fallback="見出し" cls="text-[9px] font-semibold text-gray-800 line-clamp-1" />
-              {body ? (
-                <p className="text-[7px] text-gray-600 leading-snug line-clamp-3 flex-1 mt-0.5">{body}</p>
-              ) : (
-                <div className="flex-1 mt-0.5">
-                  <PlaceholderLines n={2} />
-                </div>
-              )}
-              <Val v={content.addressee} fallback="宛名" cls="text-[7px] text-gray-400" />
-            </div>
-            <ImgBox className="w-5/12 rounded" />
-          </div>
-        );
-      }
-      // C: quote style
-      return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-2 border-t-[3px] border-b-[3px] border-red-200 gap-1">
-          <Val v={h} fallback="見出し" cls="text-[9px] font-semibold text-gray-800 text-center line-clamp-1 w-full" />
-          {body ? (
-            <p className="text-[7px] text-gray-600 leading-snug text-center line-clamp-3">{body}</p>
-          ) : (
-            <PlaceholderLines n={2} />
-          )}
-          <Val v={content.responsible} fallback="" cls="text-[7px] text-gray-400 text-right w-full" />
+  // ── Cover slide (表紙) ───────────────────────────────────────────────────
+  if (isCover || sectionKey === "greeting") {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-white px-2 py-1 gap-0.5">
+        {/* Company logo / text */}
+        <div className="text-[8px] font-bold text-red-600 tracking-widest text-center leading-tight">
+          KANSAI SUPER STUDIO
         </div>
-      );
-    }
+        <div className="w-8 h-px bg-red-400 my-0.5" />
+        {/* Title */}
+        {(title || h) ? (
+          <div className="text-[9px] font-semibold text-gray-800 text-center leading-snug line-clamp-2">
+            {title || h}
+          </div>
+        ) : (
+          <div className="text-[9px] text-gray-300 italic text-center">企画書タイトル</div>
+        )}
+        {/* Client */}
+        {clientName ? (
+          <div className="text-[7px] text-gray-600 text-center line-clamp-1 mt-0.5">{clientName}</div>
+        ) : (
+          <div className="text-[7px] text-gray-300 italic text-center mt-0.5">提案先名</div>
+        )}
+        {/* Date */}
+        {date ? (
+          <div className="text-[7px] text-gray-400 text-center mt-0.5">{date}</div>
+        ) : (
+          <div className="text-[7px] text-gray-300 italic text-center mt-0.5">日付</div>
+        )}
+      </div>
+    );
+  }
 
+  switch (sectionKey) {
     // ── ブランド紹介 ─────────────────────────────────────────────────────────
     case "brand": {
       if (type === "A") {
