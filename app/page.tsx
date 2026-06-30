@@ -29,6 +29,8 @@ import {
   FilePlus,
   ChevronDown,
   ChevronUp,
+  Upload,
+  X,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -258,10 +260,11 @@ interface ThumbnailProps {
   date: string;
   title: string;
   clientName: string;
+  companyLogo: string;
   onSelect: () => void;
 }
 
-function SortableThumbnail({ slide, index, content, date, title, clientName, onSelect }: ThumbnailProps) {
+function SortableThumbnail({ slide, index, content, date, title, clientName, companyLogo, onSelect }: ThumbnailProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
 
@@ -306,6 +309,7 @@ function SortableThumbnail({ slide, index, content, date, title, clientName, onS
           title={title}
           clientName={clientName}
           date={date}
+          companyLogo={companyLogo}
         />
       </div>
 
@@ -313,14 +317,22 @@ function SortableThumbnail({ slide, index, content, date, title, clientName, onS
       {!isCover && (
         <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0 flex items-center justify-between gap-1">
           <span className="text-[7px] text-gray-400 truncate flex-1">{getLayoutName(slide.sectionKey, slide.type)}</span>
-          <span className="text-[7px] text-gray-400 shrink-0">KANSAI SUPER STUDIO{date ? `　${date}` : ""}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            {companyLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={companyLogo} alt="" className="h-2.5 max-w-[40px] object-contain opacity-60" />
+            ) : (
+              <span className="text-[6px] text-gray-400">KANSAI SUPER STUDIO</span>
+            )}
+            {date && <span className="text-[6px] text-gray-400">{date}</span>}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function DragOverlayThumbnail({ slide, index, content, date, title, clientName }: Omit<ThumbnailProps, "onSelect">) {
+function DragOverlayThumbnail({ slide, index, content, date, title, clientName, companyLogo }: Omit<ThumbnailProps, "onSelect">) {
   const isCover = slide.sectionKey === "greeting";
   const displayName =
     slide.slideIndexInSection > 1
@@ -343,12 +355,21 @@ function DragOverlayThumbnail({ slide, index, content, date, title, clientName }
           title={title}
           clientName={clientName}
           date={date}
+          companyLogo={companyLogo}
         />
       </div>
       {!isCover && (
         <div className="bg-gray-50 border-t border-gray-100 px-2 py-[2px] shrink-0 flex items-center justify-between gap-1">
           <span className="text-[7px] text-gray-400 truncate flex-1">{getLayoutName(slide.sectionKey, slide.type)}</span>
-          <span className="text-[7px] text-gray-400 shrink-0">KANSAI SUPER STUDIO{date ? `　${date}` : ""}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            {companyLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={companyLogo} alt="" className="h-2.5 max-w-[40px] object-contain opacity-60" />
+            ) : (
+              <span className="text-[6px] text-gray-400">KANSAI SUPER STUDIO</span>
+            )}
+            {date && <span className="text-[6px] text-gray-400">{date}</span>}
+          </div>
         </div>
       )}
     </div>
@@ -699,6 +720,61 @@ export default function Home() {
                 <Label htmlFor="client" className="text-sm font-medium text-gray-700">提案先名</Label>
                 <Input id="client" value={clientName} onChange={(e) => setClientName(e.target.value)} className="h-11 text-base" placeholder="株式会社〇〇" />
               </div>
+
+              {/* ── Company logo ── */}
+              <div className="md:col-span-3 space-y-2">
+                <Label className="text-sm font-medium text-gray-700">会社ロゴ</Label>
+                {companyLogo ? (
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={companyLogo}
+                      alt="会社ロゴ"
+                      className="h-10 max-w-[180px] object-contain border border-gray-200 rounded bg-gray-50 px-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCompanyLogo("")}
+                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors px-2 py-1 rounded border border-gray-200 hover:border-red-300"
+                    >
+                      <X className="w-3 h-3" />ロゴを削除
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <label
+                      htmlFor="logo-upload"
+                      className="flex items-center gap-2 cursor-pointer h-10 px-4 rounded-md border border-gray-300 bg-gray-50 hover:bg-gray-100 text-sm text-gray-600 transition-colors"
+                    >
+                      <Upload className="w-4 h-4 text-gray-400" />
+                      画像を選択
+                      <input
+                        id="logo-upload"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert("ファイルサイズは2MB以下にしてください");
+                            e.target.value = "";
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const result = ev.target?.result;
+                            if (typeof result === "string") setCompanyLogo(result);
+                          };
+                          reader.readAsDataURL(file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <span className="text-xs text-gray-400">未設定：KANSAI SUPER STUDIO をテキスト表示　PNG / JPG / WebP · 2MB以下</span>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -795,6 +871,7 @@ export default function Home() {
                             date={date}
                             title={title}
                             clientName={clientName}
+                            companyLogo={companyLogo}
                             onSelect={() => handleSelectSlide(slide.sectionKey)}
                           />
                         ))}
@@ -809,6 +886,7 @@ export default function Home() {
                           date={date}
                           title={title}
                           clientName={clientName}
+                          companyLogo={companyLogo}
                         />
                       )}
                     </DragOverlay>

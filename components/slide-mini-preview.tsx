@@ -13,6 +13,7 @@ interface Props {
   title?: string;
   clientName?: string;
   date?: string;
+  companyLogo?: string;
 }
 
 // ── Shared micro-components ──────────────────────────────────────────────────
@@ -75,8 +76,9 @@ function Arrow({ dir = "right" }: { dir?: "right" | "both" | "down" }) {
 
 // ── Section layouts ───────────────────────────────────────────────────────────
 
-export function SlideMiniPreview({ sectionKey, type, content, isCover, title, clientName, date }: Props) {
+export function SlideMiniPreview({ sectionKey, type, content, isCover, title, clientName, date, companyLogo }: Props) {
   const h = content.heading ?? "";
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const body = content.body ?? "";
 
   // ── Cover slide (表紙) ───────────────────────────────────────────────────
@@ -110,9 +112,15 @@ export function SlideMiniPreview({ sectionKey, type, content, isCover, title, cl
         ) : (
           <div className="text-[9px] text-gray-300 italic text-center">提案先名</div>
         )}
-        {/* KANSAI SUPER STUDIO + date — small */}
-        <div className="text-[6px] text-gray-400 text-center leading-tight mt-0.5">
-          {["KANSAI SUPER STUDIO", date || ""].filter(Boolean).join("　")}
+        {/* KANSAI SUPER STUDIO / logo + date — small */}
+        <div className="flex items-center gap-1 mt-1">
+          {companyLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={companyLogo} alt="" className="h-2.5 max-w-[50px] object-contain opacity-80" />
+          ) : (
+            <span className="text-[6px] text-gray-400 font-medium">KANSAI SUPER STUDIO</span>
+          )}
+          {date && <span className="text-[6px] text-gray-400">{date}</span>}
         </div>
       </div>
     );

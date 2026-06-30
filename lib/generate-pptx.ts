@@ -120,7 +120,8 @@ function addShell(
   layoutName: string,
   pageNum: number,
   totalPages: number,
-  date: string
+  date: string,
+  companyLogo: string
 ) {
   // Header band
   slide.addShape("rect", {
@@ -151,11 +152,37 @@ function addShell(
     x: M, y: FOOTER_Y, w: CW, h: 0.01,
     fill: { color: "E0E0E0" }, line: { color: "E0E0E0" },
   });
-  // Footer left: KANSAI SUPER STUDIO + date
-  const footerText = date ? `KANSAI SUPER STUDIO　${date}` : "KANSAI SUPER STUDIO";
-  txt(slide, footerText, M, FOOTER_Y + 0.05, SW - M * 2 - 1.6, FOOTER_H - 0.05, {
-    fontSize: 7, color: "BBBBBB", valign: "middle", align: "center",
-  });
+
+  // Footer center: logo image or KANSAI SUPER STUDIO text + date
+  const footerCenterW = SW - M * 2 - 1.6;
+  if (companyLogo) {
+    try {
+      slide.addImage({
+        data: companyLogo,
+        x: SW / 2 - 0.6,
+        y: FOOTER_Y + 0.06,
+        w: 1.2,
+        h: FOOTER_H - 0.1,
+      });
+      if (date) {
+        txt(slide, date, SW / 2 + 0.65, FOOTER_Y + 0.05, 1.5, FOOTER_H - 0.05, {
+          fontSize: 6.5, color: "BBBBBB", valign: "middle",
+        });
+      }
+    } catch {
+      // Fallback to text if image fails
+      const footerText = date ? `KANSAI SUPER STUDIO　${date}` : "KANSAI SUPER STUDIO";
+      txt(slide, footerText, M, FOOTER_Y + 0.05, footerCenterW, FOOTER_H - 0.05, {
+        fontSize: 7, color: "BBBBBB", valign: "middle", align: "center",
+      });
+    }
+  } else {
+    const footerText = date ? `KANSAI SUPER STUDIO　${date}` : "KANSAI SUPER STUDIO";
+    txt(slide, footerText, M, FOOTER_Y + 0.05, footerCenterW, FOOTER_H - 0.05, {
+      fontSize: 7, color: "BBBBBB", valign: "middle", align: "center",
+    });
+  }
+
   // Footer page number
   txt(slide, `${pageNum} / ${totalPages}`, SW - M - 1.5, FOOTER_Y + 0.05, 1.5, FOOTER_H - 0.05, {
     fontSize: 7.5, color: "BBBBBB", align: "right", valign: "middle",
@@ -524,7 +551,8 @@ function addContentSlide(
   selectedSlide: SelectedSlide,
   pageNum: number,
   totalPages: number,
-  date: string
+  date: string,
+  companyLogo: string
 ) {
   const slide = pptx.addSlide();
   const layoutName = getLayoutName(selectedSlide.sectionKey, selectedSlide.type);
@@ -533,7 +561,7 @@ function addContentSlide(
       ? `${selectedSlide.sectionName}（${selectedSlide.slideIndexInSection}）`
       : selectedSlide.sectionName;
 
-  addShell(pptx, slide, sectionLabel, layoutName, pageNum, totalPages, date);
+  addShell(pptx, slide, sectionLabel, layoutName, pageNum, totalPages, date, companyLogo);
 
   switch (selectedSlide.sectionKey) {
     case "brand": renderBrand(slide, selectedSlide.type); break;
@@ -568,7 +596,7 @@ export async function generatePptx(options: GeneratePptxOptions): Promise<void> 
 
   // Content slides in selectedSlides order
   contentSlides.forEach((s, i) => {
-    addContentSlide(pptx, s, i + 2, totalPages, options.date);
+    addContentSlide(pptx, s, i + 2, totalPages, options.date, options.companyLogo);
   });
 
   // File name: proposal-YYYYMMDD.pptx
