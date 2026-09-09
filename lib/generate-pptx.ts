@@ -1,14 +1,8 @@
+
 import { getLayoutName, type PageType } from "./layout-labels";
+import type { SelectedSlide, SlideContent } from "./proposal/types";
 
-export interface SelectedSlide {
-  id: string;
-  sectionKey: string;
-  sectionName: string;
-  type: PageType;
-  slideIndexInSection: number;
-}
-
-export type SlideImages = Record<string, string>;
+export type { SelectedSlide };
 
 export interface GeneratePptxOptions {
   title: string;
@@ -16,7 +10,7 @@ export interface GeneratePptxOptions {
   date: string;
   companyLogo: string; // base64 data URL or "" for text fallback
   selectedSlides: SelectedSlide[];
-  pageContents?: Record<string, SlideImages>; // section-keyed image/content data
+  pageContents?: Record<string, SlideContent>; // section-keyed image/content data
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -279,7 +273,7 @@ function renderCover(pptx: any, title: string, clientName: string, date: string,
 
 // ─── Section renderers ────────────────────────────────────────────────────────
 
-function renderBrand(sl: Slide, type: PageType, images: SlideImages) {
+function renderBrand(sl: Slide, type: PageType, images: SlideContent) {
   if (type === "A") {
     const leftW = 2.8;
     addImageToSlide(sl, CX, CY, leftW, 1.3, images.brandLogo ?? "", "contain", "ロゴ");
@@ -361,7 +355,7 @@ function renderBusinessScheme(sl: Slide, type: PageType, sectionKey: string) {
   }
 }
 
-function renderCases(sl: Slide, type: PageType, images: SlideImages) {
+function renderCases(sl: Slide, type: PageType, images: SlideContent) {
   if (type === "A") {
     const imgW  = CW * 0.42;
     const textX = CX + imgW + 0.25;
@@ -392,7 +386,7 @@ function renderCases(sl: Slide, type: PageType, images: SlideImages) {
   }
 }
 
-function renderItems(sl: Slide, type: PageType, images: SlideImages) {
+function renderItems(sl: Slide, type: PageType, images: SlideContent) {
   // Items: image boxes, labels, descriptions only. No arrows, no red circles.
   if (type === "A") {
     const imgW  = CW * 0.52;
@@ -574,7 +568,7 @@ function buildContentSlide(
   totalPages: number,
   date: string,
   companyLogo: string,
-  images: SlideImages
+  images: SlideContent
 ) {
   const sl = pptx.addSlide();
 
@@ -645,7 +639,7 @@ export async function generatePptx(options: GeneratePptxOptions): Promise<void> 
 
   // Slides 2+: Content (each fully isolated)
   contentSlides.forEach((s, i) => {
-    const images = options.pageContents?.[s.sectionKey] ?? {};
+    const images = options.pageContents?.[s.id] ?? {};
     buildContentSlide(pptx, s, i + 2, totalPages, options.date, options.companyLogo, images);
   });
 
