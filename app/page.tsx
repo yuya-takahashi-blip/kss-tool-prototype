@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -66,34 +67,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { layoutLabels, getLayoutName, type PageType } from "@/lib/layout-labels";
 import { generatePptx } from "@/lib/generate-pptx";
 import { SlideMiniPreview, type SlideContent } from "@/components/slide-mini-preview";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface PageConfig {
-  sectionKey: string;
-  sectionName: string;
-  checked: boolean;
-  pageCount: number;
-  type: PageType;
-}
-
-interface SelectedSlide {
-  id: string;
-  sectionKey: string;
-  sectionName: string;
-  type: PageType;
-  slideIndexInSection: number;
-}
-
-interface DraftData {
-  title: string;
-  date: string;
-  clientName: string;
-  companyLogo: string; // base64 data URL or "" for text fallback
-  pages: Array<{ sectionKey: string; checked: boolean; pageCount: number; type: PageType }>;
-  slideOrder: string[];
-  pageContents: Record<string, SlideContent>;
-  savedAt: string;
-}
+import type { PageConfig, SelectedSlide, DraftData } from "@/lib/proposal/types";
 
 // ─── Field definitions ────────────────────────────────────────────────────────
 interface FieldDef {
@@ -303,6 +277,32 @@ function mergePages(base: PageConfig[], saved: DraftData["pages"]): PageConfig[]
   });
 }
 
+// Migrate pageContents from sectionKey-based keys to slideId-based keys.
+// For each slide: prefer raw[slide.id]; fallback to raw[slide.sectionKey] (cloned);
+// otherwise empty. Old sectionKey keys are dropped.
+function migratePageContents(
+  raw: Record<string, SlideContent>,
+  slides: SelectedSlide[]
+): Record<string, SlideContent> {
+  const result: Record<string, SlideContent> = {};
+  const sectionKeys = new Set(slides.map((s) => s.sectionKey));
+  for (const slide of slides) {
+    if (raw[slide.id]) {
+      result[slide.id] = { ...raw[slide.id] };
+    } else if (raw[slide.sectionKey]) {
+      result[slide.id] = { ...raw[slide.sectionKey] };
+    }
+  }
+  // Preserve slideId-keyed entries for slides not in current selection (unchecked sections)
+  for (const [key, val] of Object.entries(raw)) {
+    if (!sectionKeys.has(key) && !result[key] && !slides.some((s) => s.id === key)) {
+      // Key is not a current sectionKey and not a current slideId — keep it
+      result[key] = { ...val };
+    }
+  }
+  return result;
+}
+
 // ─── Sortable thumbnail ───────────────────────────────────────────────────────
 interface ThumbnailProps {
   slide: SelectedSlide;
@@ -507,9 +507,9 @@ interface PageContentFormProps {
   sectionKey: string;
   sectionName: string;
   layoutName: string;
-  slideCount: number;
-  content: SlideContent;
-  onContentChange: (sectionKey: string, fieldKey: string, value: string) => void;
+  slideIds: string[];
+  pageContents: Record<string, SlideContent>;
+  onContentChange: (slideId: string, fieldKey: string, value: string) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -518,14 +518,17 @@ function PageContentForm({
   sectionKey,
   sectionName,
   layoutName,
-  slideCount,
-  content,
+  slideIds,
+  pageContents,
   onContentChange,
   open,
   onOpenChange,
 }: PageContentFormProps) {
   const fields      = getFieldsForSection(sectionKey);
   const imageFields = SECTION_IMAGE_FIELDS[sectionKey] ?? [];
+  const [activePageIndex, setActivePageIndex] = useState(0);
+  const activeSlideId = slideIds[activePageIndex] ?? slideIds[0] ?? "";
+  const content = pageContents[activeSlideId] ?? EMPTY_CONTENT;
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
@@ -541,8 +544,8 @@ function PageContentForm({
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-semibold text-sm text-gray-800 shrink-0">{sectionName}</span>
-                {slideCount > 1 && (
-                  <span className="text-xs text-gray-500 shrink-0">({slideCount}ページ)</span>
+                {slideIds.length > 1 && (
+                  <span className="text-xs text-gray-500 shrink-0">({slideIds.length}ページ)</span>
                 )}
                 <span className="text-xs font-medium px-2 py-0.5 bg-red-50 text-red-600 rounded whitespace-nowrap shrink-0 hidden sm:inline">
                   {layoutName}
@@ -558,6 +561,27 @@ function PageContentForm({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="p-4 space-y-5">
+            {/* Page selector for multi-page sections */}
+            {slideIds.length > 1 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-gray-500 shrink-0">編集ページ:</span>
+                {slideIds.map((id, i) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActivePageIndex(i)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                      i === activePageIndex
+                        ? "bg-red-600 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {i + 1}ページ目
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Text fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {fields.map((field) =>
@@ -566,7 +590,7 @@ function PageContentForm({
                     <Label className="text-xs font-medium text-gray-600">{field.label}</Label>
                     <Textarea
                       value={content[field.key] ?? ""}
-                      onChange={(e) => onContentChange(sectionKey, field.key, e.target.value)}
+                      onChange={(e) => onContentChange(activeSlideId, field.key, e.target.value)}
                       placeholder={`${field.label}を入力`}
                       className="min-h-[88px] text-base resize-y leading-relaxed"
                     />
@@ -576,7 +600,7 @@ function PageContentForm({
                     <Label className="text-xs font-medium text-gray-600">{field.label}</Label>
                     <Input
                       value={content[field.key] ?? ""}
-                      onChange={(e) => onContentChange(sectionKey, field.key, e.target.value)}
+                      onChange={(e) => onContentChange(activeSlideId, field.key, e.target.value)}
                       placeholder={`${field.label}を入力`}
                       className="h-11 text-base"
                     />
@@ -600,7 +624,7 @@ function PageContentForm({
                       fieldKey={imgField.key}
                       label={imgField.label}
                       value={content[imgField.key] ?? ""}
-                      onChange={(key, val) => onContentChange(sectionKey, key, val)}
+                      onChange={(key, val) => onContentChange(activeSlideId, key, val)}
                     />
                   ))}
                 </div>
@@ -658,7 +682,9 @@ export default function Home() {
     setPages(restoredPages);
     setSelectedSlides(orderedSlides);
     setPageContents(
-      draft.pageContents && typeof draft.pageContents === "object" ? draft.pageContents : {}
+      draft.pageContents && typeof draft.pageContents === "object"
+        ? migratePageContents(draft.pageContents, orderedSlides)
+        : {}
     );
     setSavedAt(draft.savedAt ?? "");
 
@@ -689,11 +715,11 @@ export default function Home() {
     });
   }, []);
 
-  // ── Content change ────────────────────────────────────────────────────────
-  const handleContentChange = (sectionKey: string, fieldKey: string, value: string) => {
+  // ── Content change (slideId-based) ────────────────────────────────────────
+  const handleContentChange = (slideId: string, fieldKey: string, value: string) => {
     setPageContents((prev) => ({
       ...prev,
-      [sectionKey]: { ...(prev[sectionKey] ?? EMPTY_CONTENT), [fieldKey]: value },
+      [slideId]: { ...(prev[slideId] ?? EMPTY_CONTENT), [fieldKey]: value },
     }));
   };
 
@@ -784,10 +810,23 @@ export default function Home() {
       );
     }
     if (field === "checked" || field === "pageCount") {
+      const newChecked  = field === "checked" ? (value as boolean) : page.checked;
+      const newPageCount = field === "pageCount" ? (value as number) : page.pageCount;
+      // When page count decreases, delete pageContents for removed slide IDs
+      if (field === "pageCount" && newPageCount < page.pageCount) {
+        const removedIds = Array.from({ length: page.pageCount - newPageCount }, (_, i) =>
+          `${sectionKey}-${newPageCount + i}`
+        );
+        setPageContents((prev) => {
+          const next = { ...prev };
+          for (const id of removedIds) delete next[id];
+          return next;
+        });
+      }
       updateSelectedSlidesForSection(
         sectionKey,
-        field === "checked" ? (value as boolean) : page.checked,
-        field === "pageCount" ? (value as number) : page.pageCount,
+        newChecked,
+        newPageCount,
         page.type
       );
     }
@@ -1030,7 +1069,7 @@ export default function Home() {
                             key={slide.id}
                             slide={slide}
                             index={index}
-                            content={pageContents[slide.sectionKey] ?? EMPTY_CONTENT}
+                            content={pageContents[slide.id] ?? EMPTY_CONTENT}
                             date={date}
                             title={title}
                             clientName={clientName}
@@ -1045,7 +1084,7 @@ export default function Home() {
                         <DragOverlayThumbnail
                           slide={activeSlide}
                           index={activeIndex}
-                          content={pageContents[activeSlide.sectionKey] ?? EMPTY_CONTENT}
+                          content={pageContents[activeSlide.id] ?? EMPTY_CONTENT}
                           date={date}
                           title={title}
                           clientName={clientName}
@@ -1136,8 +1175,8 @@ export default function Home() {
                       sectionKey={sectionKey}
                       sectionName={firstSlide.sectionName}
                       layoutName={getLayoutName(sectionKey, firstSlide.type)}
-                      slideCount={sectionSlides.length}
-                      content={pageContents[sectionKey] ?? EMPTY_CONTENT}
+                      slideIds={sectionSlides.map((s) => s.id)}
+                      pageContents={pageContents}
                       onContentChange={handleContentChange}
                       open={openSections.has(sectionKey)}
                       onOpenChange={(v) => handleSectionOpenChange(sectionKey, v)}
